@@ -1,4 +1,4 @@
-# Interview → DOCX
+# Interview Chatbot
 
 **A guided interview assistant that collects structured data in conversation and
 writes it back into your own Word template — with a human verification step
