@@ -61,13 +61,14 @@ the audit trail, or on disk.
 
 ## Conversation engine
 
-Three interchangeable backends, chosen with `LLM_PROVIDER`:
+Inference is **local**. Nothing an interviewee types is sent to a third-party
+model, so the questionnaire can be run on data that is not allowed to leave the
+network.
 
-| Setting | Engine | Leaves your network | Per turn |
+| `LLM_PROVIDER` | Engine | Leaves your network | Per turn |
 | --- | --- | --- | --- |
 | `ollama` | local model, `qwen2.5:3b` by default | **nothing** | 3–8 s |
-| `anthropic` | `claude-opus-5` | the current turn only | 2–5 s |
-| `off` | deterministic, no model at all | nothing | instant |
+| `off` | deterministic, no model at all | **nothing** | instant |
 
 A 3B model cannot fill an eight-field turn schema in one pass — measured, it
 answered *"question"* to every message with empty fields, because constrained
@@ -136,7 +137,7 @@ backend/
     core/      config · crypto (AES-256-GCM) · security (Argon2id, JWT, TOTP, CSRF)
                ratelimit · audit (hash chain) · middleware (headers, log redaction)
     api/       auth · survey · chat · admin · deps (access guards)
-    ai/        llm (Anthropic + Ollama) · engine (routing) · staged (small models)
+    ai/        llm (Ollama client) · engine (routing) · staged (small models)
                social (deterministic courtesy and navigation)
     pca/       blueprint (question plan) · glossary · docx_filler
     scripts/   genkeys · seed · reset_account
