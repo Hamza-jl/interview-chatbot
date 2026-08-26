@@ -1,0 +1,41 @@
+# ---- secrets: never commit ------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- client documents: never published ------------------------------------
+# The interview plan is derived one-to-one from these files, but they belong to
+# the organisation being interviewed. Supply your own - see
+# backend/templates/README.md.
+backend/templates/*.docx
+backend/templates/*.dotx
+
+# ---- runtime data (contains encrypted client answers) ---------------------
+backend/var/
+backend/**/*.db
+backend/**/*.db-shm
+backend/**/*.db-wal
+backend/exports/
+
+# ---- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- node ------------------------------------------------------------------
+node_modules/
+dist/
+.vite/
+
+# ---- editors / os ----------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+~$*

@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-100 font-sans antialiased;
+    /* Secondary palette as background graphics - the charter's intended use. */
+    background-image:
+      radial-gradient(52rem 34rem at 92% -8%, rgba(253, 218, 222, 0.55), transparent 62%),
+      radial-gradient(44rem 30rem at 2% 104%, rgba(215, 235, 231, 0.5), transparent 64%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-poppy-500/25 text-ink-100;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-poppy-500/60 ring-offset-2 ring-offset-ink-950;
+  }
+
+  input,
+  textarea,
+  button,
+  select {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-ink-600 bg-ink-850/90 backdrop-blur-xl shadow-panel;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3 text-ink-100
+           placeholder:text-ink-400 transition
+           focus:border-poppy-500/70 focus:ring-4 focus:ring-poppy-500/10;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold
+           transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45;
+  }
+
+  /* Red Poppy carries the call to action - solid, never gradiented. */
+  .btn-primary {
+    @apply btn bg-poppy-500 text-white shadow-glow
+           hover:bg-poppy-600 hover:shadow-glow-lg active:bg-poppy-600;
+  }
+
+  .btn-ghost {
+    @apply btn border border-ink-600 bg-ink-950 text-ink-200 shadow-card
+           hover:border-ink-500 hover:bg-ink-800 hover:text-ink-100;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-ink-600 bg-ink-950
+           px-3 py-1.5 text-xs font-medium text-ink-300 shadow-card transition
+           hover:border-poppy-500/60 hover:text-poppy-500;
+  }
+
+  .label {
+    @apply mb-2 block text-xs font-semibold uppercase tracking-[.12em] text-ink-400;
+  }
+
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: #c9c8c4 transparent;
+  }
+  .scroll-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-slim::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-500;
+  }
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .hairline {
+    @apply border-b border-ink-600;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

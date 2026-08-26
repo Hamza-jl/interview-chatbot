@@ -1,0 +1,63 @@
+# Deployment topology.
+#
+# Secrets are read from the environment (or a secrets manager), never baked into
+# an image. Copy backend/.env.example to .env at the repository root, fill it in,
+# and keep it out of version control.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pca
+      POSTGRES_USER: pca
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pca -d pca"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Reachable only from the application network.
+    networks: [internal]
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENV: prod
+      DATABASE_URL: postgresql+psycopg://pca:${POSTGRES_PASSWORD}@db:5432/pca
+      MASTER_KEK: ${MASTER_KEK:?MASTER_KEK is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      DOWNLOAD_SIGNING_KEY: ${DOWNLOAD_SIGNING_KEY:?DOWNLOAD_SIGNING_KEY is required}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-opus-5}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set this to the real portal origin}
+      COOKIE_SECURE: "true"
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      CONTACT_NAME: ${CONTACT_NAME:-Devoteam Tunisie - Practice Risk & Continuity}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-pca@example.com}
+      CONTACT_PHONE: ${CONTACT_PHONE:-+216 71 000 000}
+    volumes:
+      - exports:/srv/var
+    networks: [internal]
+    # No published port: nginx is the only way in.
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    networks: [internal]
+
+volumes:
+  pgdata:
+  exports:
+
+networks:
+  internal:
+    driver: bridge
