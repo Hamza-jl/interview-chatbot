@@ -1,34 +1,47 @@
 import { motion } from "framer-motion";
 
+import devoteamLogo from "../assets/devoteam.png";
+import clientLogo from "../assets/mansa-bank.png";
+
 /**
- * Devoteam roundel: the lowercase "d" in White on a Red Poppy disc.
+ * Brand marks.
  *
- * Red Poppy (#f8485e) is the brand primary; White is treated as an active
- * colour rather than an absence of one, which is why the counter of the "d" is
- * cut out of the disc rather than filled with a darker tone.
+ * Both are the official artwork rather than a redrawing: getting a logo subtly
+ * wrong is worse than not showing one. The client file has an opaque white
+ * background, so it is composited with `mix-blend-multiply` to sit cleanly on
+ * the page's tinted ground.
  */
+
+/** Deployment-specific line under the consultancy wordmark. */
+export const PROGRAMME_TAGLINE = "PROJETS SDSI/SMCA";
+
 export function Logo({ size = 34 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 48 48"
-      fill="none"
-      role="img"
-      aria-label="Devoteam"
-    >
-      <circle cx="24" cy="24" r="24" fill="#f8485e" />
-      {/* Bowl of the "d": a ring, so the disc shows through the counter. */}
-      <circle cx="21" cy="29.5" r="8.25" stroke="#ffffff" strokeWidth="4.5" fill="none" />
-      {/* Ascender. */}
-      <rect x="27" y="9.5" width="4.5" height="28.25" rx="2.25" fill="#ffffff" />
-    </svg>
+    <img
+      src={devoteamLogo}
+      alt="Devoteam"
+      style={{ height: size }}
+      className="w-auto shrink-0 select-none"
+      draggable={false}
+    />
+  );
+}
+
+export function ClientMark({ height = 30 }: { height?: number }) {
+  return (
+    <img
+      src={clientLogo}
+      alt="MANSA BANK"
+      style={{ height }}
+      className="w-auto shrink-0 select-none mix-blend-multiply"
+      draggable={false}
+    />
   );
 }
 
 /**
- * Full lock-up. The wordmark is set in the UI typeface rather than traced from
- * the brand font, so it stays legible at small sizes and in dark surfaces.
+ * Consultancy mark with the programme line beneath it.
+ * `compact` drops the line, for the top bar.
  */
 export function Wordmark({
   compact = false,
@@ -38,72 +51,30 @@ export function Wordmark({
   size?: number;
 }) {
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex flex-col items-start gap-1">
       <Logo size={size} />
-      <div className="leading-none">
-        <div className="font-display text-[17px] font-bold lowercase tracking-[-.01em] text-ink-100">
-          devoteam
+      {!compact && (
+        <div className="pl-[2px] text-[9.5px] font-semibold uppercase tracking-[.14em] text-ink-400">
+          {PROGRAMME_TAGLINE}
         </div>
-        {!compact && (
-          <div className="mt-1 text-[10px] font-medium uppercase tracking-[.18em] text-ink-400">
-            {PROGRAMME_TAGLINE}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-/** Deployment-specific line under the Devoteam wordmark. */
-export const PROGRAMME_TAGLINE = "PROJETS SDSI/SMCA";
-
 /**
- * Client wordmark: a serif "MANSA BANK" beside the three-plane mark.
- *
- * Redrawn rather than embedded, so the lock-up scales with the page and follows
- * the viewer's theme instead of shipping a fixed-resolution raster.
+ * The co-branded lock-up: the consultancy running the workshop, then the
+ * organisation being documented.
  */
-export function ClientMark({ height = 26 }: { height?: number }) {
+export function CoBrand({ compact = false }: { compact?: boolean }) {
+  // The client wordmark is all cap-height, so a matching pixel height reads
+  // noticeably larger than the roundel-and-lowercase Devoteam lock-up. Sized
+  // down to balance optically rather than numerically.
   return (
-    <svg
-      height={height}
-      viewBox="0 0 260 46"
-      fill="none"
-      role="img"
-      aria-label="MANSA BANK"
-      className="shrink-0"
-    >
-      <text
-        x="0"
-        y="31"
-        className="fill-ink-100"
-        fontFamily="Cormorant Garamond, Georgia, 'Times New Roman', serif"
-        fontSize="30"
-        fontWeight="600"
-        letterSpacing="1.6"
-      >
-        MANSA BANK
-      </text>
-      {/* the three overlapping planes, drawn back to front */}
-      <path d="M225 6 L252 12 L236 30 Z" fill="#C8A57C" />
-      <path d="M219 14 L241 10 L233 34 Z" fill="#D2853F" opacity="0.92" />
-      <path d="M228 30 L250 26 L240 42 Z" fill="#BFD5F0" />
-    </svg>
-  );
-}
-
-/**
- * The co-branded lock-up shown while signing in: the consultancy that runs the
- * workshop, then the organisation being documented.
- */
-export function CoBrand() {
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="flex items-center gap-5 sm:gap-7">
-        <Wordmark />
-        <span aria-hidden="true" className="h-10 w-px bg-ink-600" />
-        <ClientMark height={28} />
-      </div>
+    <div className="flex items-center gap-4 sm:gap-5">
+      <Wordmark compact={compact} size={compact ? 24 : 38} />
+      <span aria-hidden="true" className={`w-px shrink-0 bg-ink-600 ${compact ? "h-6" : "h-9"}`} />
+      <ClientMark height={compact ? 16 : 24} />
     </div>
   );
 }

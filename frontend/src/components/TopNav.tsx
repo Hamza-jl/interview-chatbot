@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { User } from "../lib/api";
-import { Wordmark } from "./Brand";
+import { CoBrand } from "./Brand";
 
 export function TopNav({
   user,
@@ -40,7 +40,7 @@ export function TopNav({
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         className="mx-auto flex h-14 w-full max-w-[80rem] items-center justify-between rounded-2xl border border-ink-600 bg-ink-950/85 px-4 shadow-card backdrop-blur-xl"
       >
-        <Wordmark compact />
+        <CoBrand compact />
 
         <div className="hidden items-center gap-1 md:flex">
           {["État des lieux"].map((item, i) => (
