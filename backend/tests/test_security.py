@@ -260,3 +260,37 @@ def test_rate_limit_blocks_a_burst_of_messages(client):
     )
     assert blocked.status_code == 429
     assert "Retry-After" in blocked.headers
+
+
+def test_a_locked_account_is_told_so_when_the_password_is_right(client):
+    """A generic refusal for a locked account sends a legitimate user into a
+    retry loop with no idea why. Once they have proved they hold the password,
+    naming the lockout reveals nothing they do not already know."""
+    import datetime as dt
+
+    from sqlalchemy import select
+
+    from app.db.models import User, utcnow
+    from app.db.session import SessionLocal
+
+    email = "client@example.com"
+    with SessionLocal() as db:
+        user = db.execute(select(User).where(User.email == email)).scalar_one()
+        user.locked_until = utcnow() + dt.timedelta(minutes=12)
+        db.commit()
+    try:
+        right = client.post(f"{API}/auth/login", json={"email": email, "password": PASSWORD})
+        assert right.status_code == 423
+        assert "verrouill" in right.json()["detail"].lower()
+        assert "minute" in right.json()["detail"].lower()
+
+        # A wrong password on the same locked account stays indistinguishable.
+        wrong = client.post(f"{API}/auth/login", json={"email": email, "password": "not-it"})
+        assert wrong.status_code == 401
+        assert wrong.json()["detail"] == "Identifiants invalides."
+    finally:
+        with SessionLocal() as db:
+            user = db.execute(select(User).where(User.email == email)).scalar_one()
+            user.locked_until = None
+            user.failed_attempts = 0
+            db.commit()

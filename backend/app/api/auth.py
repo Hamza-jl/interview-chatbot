@@ -138,6 +138,23 @@ def login(
         # A wrong password counts against the account; a lockout does not extend itself.
         if user is not None and not password_ok and not locked:
             _register_failure(db, user)
+
+        # When the password is CORRECT but the account is locked, say so. The
+        # caller already proved they hold the credential, so naming the account
+        # reveals nothing they do not know - whereas the generic message sends a
+        # legitimate user into a retry loop with no idea why they are refused.
+        if locked and password_ok and user.is_active:
+            minutes = max(
+                1,
+                int((deps._aware(user.locked_until) - utcnow()).total_seconds() // 60) + 1,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail=(
+                    "Compte temporairement verrouillé après plusieurs tentatives. "
+                    f"Réessayez dans {minutes} minute{'s' if minutes > 1 else ''}."
+                ),
+            )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC)
 
     if security.needs_rehash(user.password_hash):
