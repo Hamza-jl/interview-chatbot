@@ -35,12 +35,12 @@ export class ErrorBoundary extends Component<Props, State> {
             <Wordmark />
           </div>
           <h1 className="font-display text-xl font-bold text-ink-100">
-            L&apos;affichage a rencontre un probleme
+            L&apos;affichage a rencontré un problème
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-300">
-            Vos reponses deja enregistrees sont conservees en lieu sur : elles ont ete chiffrees
+            Vos réponses déjà enregistrées sont conservées en lieu sur : elles ont ete chiffrées
             et sauvegardees au fur et a mesure de l&apos;entretien. Rechargez la page pour reprendre
-            la ou vous en etiez.
+            là où vous en etiez.
           </p>
           <button onClick={() => window.location.reload()} className="btn-primary mt-6 w-full">
             Recharger la page

@@ -29,7 +29,7 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-5 pb-4 pt-5">
         <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">
-          Entite documentee
+          Entité documentee
         </div>
         <div className="mt-2 break-words font-display text-[15px] font-semibold leading-snug text-ink-100">
           {state.structure.name}
@@ -39,7 +39,7 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
             {state.structure.code}
           </span>
           <span className="text-[11px] text-ink-400">
-            {state.template_kind === "dsi" ? "Modele DSI" : "Modele Entite"}
+            {state.template_kind === "dsi" ? "Modèle DSI" : "Modèle Entité"}
           </span>
         </div>
       </div>
@@ -147,7 +147,7 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
                               {answer.label}
                             </span>
                             <span className="shrink-0 text-[10px] font-medium text-ink-400 opacity-0 transition-opacity group-hover:opacity-100">
-                              {filled ? "Modifier" : "Repondre"}
+                              {filled ? "Modifier" : "Répondre"}
                             </span>
                           </button>
                         </li>

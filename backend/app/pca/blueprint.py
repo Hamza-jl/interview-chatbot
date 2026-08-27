@@ -8,8 +8,8 @@ original document.
 Table indices below are 1-based and match the order the tables appear in the
 template files:
 
-  Etat des lieux - DSI      : 17 tables
-  Etat des lieux - Entite   : 14 tables
+  État des lieux - DSI      : 17 tables
+  État des lieux - Entité   : 14 tables
 """
 from __future__ import annotations
 
@@ -62,8 +62,8 @@ CRITICITE_FLUX = ["A", "B", "C", "D"]
 SENS_FLUX = ["T", "R", "T/R"]
 
 COLS_ACTIVITES = [
-    Column("domaine", "Domaine", "Grand domaine fonctionnel de l'entite"),
-    Column("processus", "Processus", "Processus metier rattache au domaine"),
+    Column("domaine", "Domaine", "Grand domaine fonctionnel de l'entité"),
+    Column("processus", "Processus", "Processus métier rattache au domaine"),
     Column("macro_activite", "Macro activite", "Activite operationnelle concrete"),
 ]
 
@@ -73,27 +73,27 @@ COLS_CONTRAINTES = [
     Column(
         "contraintes",
         "Contraintes operationnelles",
-        "Exigences reglementaires, juridiques, contractuelles ou de confidentialite",
+        "Exigences réglementaires, juridiques, contractuelles ou de confidentialite",
     ),
     Column(
         "periodes",
         "Periodes critiques",
-        "Periodes de forte activite ou a forts enjeux (cloture mensuelle / annuelle, debut de mois)",
+        "Périodes de forte activité ou a forts enjeux (clôture mensuelle / annuelle, debut de mois)",
     ),
 ]
 
 COLS_APPLICATIONS = [
     Column("domaine", "Domaine"),
     Column("processus", "Processus"),
-    Column("applications", "Inventaire des applications", "Nom des applications utilisees"),
+    Column("applications", "Inventaire des applications", "Nom des applications utilisées"),
     Column("couverture", "Couverture fonctionnelle", "Ce que l'application couvre reellement"),
-    Column("criticite", "Criticite SI", "Niveau de dependance", choices=CRITICITE_SI),
+    Column("criticite", "Criticite SI", "Niveau de dépendance", choices=CRITICITE_SI),
 ]
 
 COLS_FLUX_INTERNES = [
     Column("correspondant", "Groupes fonctionnels / Correspondants"),
     Column("type_info", "Type d'information internes"),
-    Column("criticite", "Niveau de criticite", "A, B, C ou D", choices=CRITICITE_FLUX),
+    Column("criticite", "Niveau de criticité", "A, B, C ou D", choices=CRITICITE_FLUX),
     Column("sens", "Transmis / Recu (T/R)", choices=SENS_FLUX),
     Column("ressources", "Ressources SI utilisees"),
 ]
@@ -116,7 +116,7 @@ COLS_COLLABORATEURS = [
     Column("nom", "Nom"),
     Column("prenom", "Prenom"),
     Column("poste", "Poste"),
-    Column("anciennete", "Anciennete dans le poste"),
+    Column("anciennete", "Ancienneté dans le poste"),
     Column("suppleants", "Suppleants possibles", required=False),
 ]
 
@@ -124,8 +124,8 @@ COLS_APPLI_ANNEXE = [
     Column("domaine", "Domaine"),
     Column("processus", "Processus"),
     Column("applications", "Inventaire des applications"),
-    Column("criticite", "Criticite SI (par application)", choices=CRITICITE_SI),
-    Column("contournement", "Contournement envisageable", "Mode degrade possible sans l'application"),
+    Column("criticite", "Criticité SI (par application)", choices=CRITICITE_SI),
+    Column("contournement", "Contournement envisageable", "Mode dégradé possible sans l'application"),
 ]
 
 COLS_DOCUMENTS = [
@@ -135,7 +135,7 @@ COLS_DOCUMENTS = [
         "Type de stockage",
         choices=["Electronique", "Papier", "Electronique et Papier"],
     ),
-    Column("duplication", "Duplication (O/N) - si oui, ou ?", "Repondre O ou N puis preciser le lieu"),
+    Column("duplication", "Duplication (O/N) - si oui, ou ?", "Répondre O ou N puis préciser le lieu"),
 ]
 
 
@@ -149,21 +149,15 @@ def _fiche(prefix: str) -> List[Question]:
             kind="field",
             section="Fiche de suivi",
             label="Nom du Responsable",
-            prompt="Pour commencer, quel est le nom du responsable de l'entite ?",
-            help="Le responsable hierarchique de la structure documentee.",
-            example="Mme Sonia Ben Ammar",
+            prompt="Pour commencer, quel est le nom du responsable de l'entité ?",
+            help="Le responsable hiérarchique de la structure documentee.",
+            example="M. Fabrice HAUHOUOT",
             target=Target(table=1, row=2, col=1),
         ),
-        Question(
-            id=f"{prefix}.fiche.visavis",
-            kind="field",
-            section="Fiche de suivi",
-            label="Vis-a-vis",
-            prompt="Qui est le vis-a-vis pour cet atelier, c'est-a-dire la ou les personnes rencontrees ?",
-            help="Interlocuteur(s) presents lors de l'entretien d'etat des lieux.",
-            example="M. Karim Trabelsi, Responsable Production",
-            target=Target(table=1, row=3, col=1),
-        ),
+        # The "Vis-a-vis" cell (table 1, row 3) is deliberately NOT asked here:
+        # the consultant fills it by hand after the workshop. Because no question
+        # targets it, the filler never touches it and it stays exactly as the
+        # template shipped it - blank.
     ]
 
 
@@ -178,16 +172,16 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
             section="Annexe - Echanges d'informations internes",
             label="Echanges d'informations internes",
             prompt=(
-                "Passons a l'annexe des echanges internes. Avec quelles entites de la banque "
+                "Passons à l'annexe des échanges internes. Avec quelles entités de la banque "
                 "echangez-vous des informations, et pour chacune : quel type d'information, "
-                "quel niveau de criticite (A a D), le sens du flux (T/R) et les ressources SI utilisees ?"
+                "quel niveau de criticité (A a D), le sens du flux (T/R) et les ressources SI utilisées ?"
             ),
             help=(
-                "Niveau de criticite du flux - A : ne peut pas etre traite manuellement (SI indispensable) ; "
-                "B : traitable manuellement de facon limitee dans le temps ; C : traitable manuellement ; "
+                "Niveau de criticité du flux - A : ne peut pas être traité manuellement (SI indispensable) ; "
+                "B : traitable manuellement de facon limitée dans le temps ; C : traitable manuellement ; "
                 "D : peut etre arrete."
             ),
-            example="Direction des Engagements | Dossiers de credit | A | T/R | Core Banking, Messagerie",
+            example="Direction des Engagements | Dossiers de crédit | A | T/R | Core Banking, Messagerie",
             columns=COLS_FLUX_INTERNES,
             target=Target(table=t_int, mode="rows"),
             min_rows=2,
@@ -198,15 +192,15 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
             section="Annexe - Echanges d'informations externes",
             label="Echanges d'informations externes",
             prompt=(
-                "Meme exercice pour l'exterieur de la banque : quels correspondants externes, "
+                "Même exercice pour l'exterieur de la banque : quels correspondants externes, "
                 "quel type d'information, la typologie (mono ou multi-correspondant), le sens du flux "
-                "et les ressources SI utilisees ?"
+                "et les ressources SI utilisées ?"
             ),
             help=(
-                "Typologie - Mono-correspondant (preciser s'il est en situation de monopole) "
+                "Typologie - Mono-correspondant (préciser s'il est en situation de monopole) "
                 "ou Multi-correspondants."
             ),
-            example="Banque Centrale de Tunisie | Reporting reglementaire | Mono (monopole) | T | Portail BCT",
+            example="Banque Centrale de Tunisie | Reporting réglementaire | Mono (monopole) | T | Portail BCT",
             columns=COLS_FLUX_EXTERNES,
             target=Target(table=t_ext, mode="rows"),
         ),
@@ -216,13 +210,13 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
             section="Annexe - Collaborateurs cles",
             label="Collaborateurs cles",
             prompt=(
-                "Qui sont vos collaborateurs cles ? Pour chacun : fonction, nom, prenom, poste, "
-                "anciennete dans le poste et suppleants possibles."
+                "Qui sont vos collaborateurs clés ? Pour chacun : fonction, nom, prénom, poste, "
+                "ancienneté dans le poste et suppléants possibles."
             ),
             help=(
-                "Est collaborateur cle : tout collaborateur disposant d'une expertise rare ou pointue ; "
+                "Est collaborateur clé : tout collaborateur disposant d'une expertise rare ou pointue ; "
                 "tout collaborateur qui assure une tache tout seul ; tout collaborateur dont le potentiel "
-                "d'encadrement est affirme au sein de l'equipe."
+                "d'encadrement est affirme au sein de l'équipe."
             ),
             example="Expert monetique | Trabelsi | Karim | Ingenieur systeme | 8 ans | Aucun suppleant identifie",
             columns=COLS_COLLABORATEURS,
@@ -235,15 +229,15 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
             label="Applications informatiques",
             prompt=(
                 "Detaillons l'annexe applicative : pour chaque application, le domaine, le processus, "
-                "la criticite SI (V, C, MC ou PC) et le contournement envisageable en cas d'indisponibilite."
+                "la criticité SI (V, C, MC ou PC) et le contournement envisageable en cas d'indisponibilité."
             ),
             help=(
-                "Criticite SI - Vitale (V) : le processus metier est arrete si l'application est indisponible ; "
-                "Critique (C) : le processus necessite un travail manuel pour contourner l'application ; "
-                "Moyennement critique (MC) : le processus necessite un contournement par une autre application ; "
-                "Peu critique (PC) : le processus reste operationnel et peu impacte."
+                "Criticité SI - Vitale (V) : le processus métier est arrêté si l'application est indisponible ; "
+                "Critique (C) : le processus nécessite un travail manuel pour contourner l'application ; "
+                "Moyennement critique (MC) : le processus nécessite un contournement par une autre application ; "
+                "Peu critique (PC) : le processus reste opérationnel et peu impacté."
             ),
-            example="Credit | Octroi de credit | Delta Credit | V | Saisie manuelle sur formulaire papier, 48h max",
+            example="Crédit | Octroi de crédit | Delta Crédit | V | Saisie manuelle sur formulaire papier, 48h max",
             columns=COLS_APPLI_ANNEXE,
             target=Target(table=t_appli, mode="rows"),
         ),
@@ -253,11 +247,11 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
             section="Annexe - Documents et fichiers critiques",
             label="Documents et fichiers critiques",
             prompt=(
-                "Derniere annexe : quels documents et fichiers critiques utilisez-vous ? "
+                "Dernière annexe : quels documents et fichiers critiques utilisez-vous ? "
                 "Precisez pour chacun le type de stockage (electronique ou papier) et s'il existe "
                 "une duplication, et si oui ou elle se trouve."
             ),
-            help="Fichiers, registres et contrats necessaires a la poursuite de l'activite.",
+            help="Fichiers, registres et contrats nécessaires à la poursuite de l'activité.",
             example="Registre des garanties | Electronique et Papier | O - coffre agence centrale + GED",
             columns=COLS_DOCUMENTS,
             target=Target(table=t_docs, mode="rows"),
@@ -277,10 +271,10 @@ DSI_PLAN: List[Question] = [
         section="2. Organisation, gouvernance & effectifs",
         label="Organigramme & Repartition",
         prompt=(
-            "Decrivez l'organisation de la DSI : effectif total, repartition par equipe "
-            "et roles detailles."
+            "Décrivez l'organisation de la DSI : effectif total, répartition par équipe "
+            "et rôles détaillés."
         ),
-        help="Une reponse redigee, aussi precise que possible sur les effectifs par equipe.",
+        help="Une réponse rédigée, aussi precise que possible sur les effectifs par équipe.",
         example=(
             "42 collaborateurs repartis en 4 poles : Etudes & Developpement (16), Production & "
             "Infrastructure (12), Securite SI (5), Support & Proximite (9)."
@@ -292,19 +286,19 @@ DSI_PLAN: List[Question] = [
         kind="open",
         section="2. Organisation, gouvernance & effectifs",
         label="Gouvernance",
-        prompt="Quels comites existent, et comment le pilotage et les decisions sont-ils organises ?",
-        example="Comite SI mensuel preside par le DGA, COPIL projets bimensuel, CAB hebdomadaire.",
+        prompt="Quels comités existent, et comment le pilotage et les décisions sont-ils organisés ?",
+        example="Comité SI mensuel preside par le DGA, COPIL projets bimensuel, CAB hebdomadaire.",
         target=Target(table=2, row=2, col=1),
     ),
     # --- 3. Activites et processus metiers (table 3) -------------------------
     Question(
         id="dsi.activites.grid",
         kind="grid",
-        section="3. Activites et processus metiers",
-        label="Activites et processus metiers",
+        section="3. Activités et processus métiers",
+        label="Activités et processus métiers",
         prompt=(
-            "Cartographions vos activites. Pour chaque domaine, quels sont les processus "
-            "et les macro-activites associees ?"
+            "Cartographions vos activités. Pour chaque domaine, quels sont les processus "
+            "et les macro-activités associées ?"
         ),
         example="Production informatique | Exploitation | Supervision des traitements batch de nuit",
         columns=COLS_ACTIVITES,
@@ -315,16 +309,16 @@ DSI_PLAN: List[Question] = [
     Question(
         id="dsi.contraintes.grid",
         kind="grid",
-        section="4. Contraintes operationnelles et periodes critiques",
-        label="Contraintes operationnelles et periodes critiques",
+        section="4. Contraintes opérationnelles et périodes critiques",
+        label="Contraintes opérationnelles et périodes critiques",
         prompt=(
-            "Pour ces memes processus, quelles contraintes operationnelles s'appliquent "
-            "et quelles sont les periodes critiques ?"
+            "Pour ces mêmes processus, quelles contraintes opérationnelles s'appliquent "
+            "et quelles sont les périodes critiques ?"
         ),
         help=(
             "Contraintes operationnelles : exigences reglementaires, juridiques, contractuelles "
-            "ou de confidentialite. Periodes critiques : periodes de forte activite ou a forts "
-            "enjeux (cloture mensuelle / annuelle, debut de mois)."
+            "ou de confidentialite. Périodes critiques : périodes de forte activité ou a forts "
+            "enjeux (clôture mensuelle / annuelle, debut de mois)."
         ),
         example="Production | Exploitation | Reporting BCT sous 48h | Cloture mensuelle J+1 a J+3",
         columns=COLS_CONTRAINTES,
@@ -337,10 +331,10 @@ DSI_PLAN: List[Question] = [
         section="5. Architecture SI et Data",
         label="Architecture SI",
         prompt=(
-            "Decrivez votre architecture SI : cartographie applicative et technique, "
+            "Décrivez votre architecture SI : cartographie applicative et technique, "
             "urbanisation et flux d'integration."
         ),
-        example="Core Banking Delta sur AIX, ESB Talend pour les flux, 3 zones reseau segmentees.",
+        example="Core Banking Delta sur AIX, ESB Talend pour les flux, 3 zones réseau segmentees.",
         target=Target(table=5, row=1, col=1),
     ),
     Question(
@@ -348,7 +342,7 @@ DSI_PLAN: List[Question] = [
         kind="open",
         section="5. Architecture SI et Data",
         label="Architecture Data",
-        prompt="Et cote donnees : disposez-vous d'un datawarehouse, d'un datalake, d'outils decisionnels ?",
+        prompt="Et cote données : disposez-vous d'un datawarehouse, d'un datalake, d'outils decisionnels ?",
         example="Datawarehouse Oracle alimente en batch quotidien, restitution Power BI.",
         target=Target(table=5, row=2, col=1),
     ),
@@ -360,13 +354,13 @@ DSI_PLAN: List[Question] = [
         label="Applications & couverture fonctionnelle",
         prompt=(
             "Inventorions les applications : par domaine et processus, quelles applications, "
-            "quelle couverture fonctionnelle et quelle criticite SI (V, C, MC, PC) ?"
+            "quelle couverture fonctionnelle et quelle criticité SI (V, C, MC, PC) ?"
         ),
         help=(
             "Criticite SI - Vitale (V), Critique (C), Moyennement critique (MC), Peu critique (PC). "
-            "Elle traduit le niveau de dependance du processus a l'application."
+            "Elle traduit le niveau de dépendance du processus à l'application."
         ),
-        example="Monetique | Gestion des cartes | SAB Monetique | Emission et opposition cartes | V",
+        example="Monétique | Gestion des cartes | SAB Monétique | Emission et opposition cartes | V",
         columns=COLS_APPLICATIONS,
         target=Target(table=6, mode="rows"),
     ),
@@ -377,35 +371,35 @@ DSI_PLAN: List[Question] = [
         section="7. Infra & strategie Cloud",
         label="Infra & strategie Cloud",
         prompt=(
-            "Faisons l'etat des lieux de l'infrastructure : serveurs, hebergement "
-            "(On-Premise / Cloud) et strategie d'infogerance."
+            "Faisons l'État des lieux de l'infrastructure : serveurs, hébergement "
+            "(On-Premise / Cloud) et stratégie d'infogerance."
         ),
-        example="120 VM VMware on-premise sur 2 datacenters actif/passif, aucun IaaS public a ce jour.",
+        example="120 VM VMware on-premise sur 2 datacenters actif/passif, aucun IaaS public à ce jour.",
         target=Target(table=7, row=1, col=1),
     ),
     # --- 8. Gestion des donnees & patrimoine documentaire (table 8) ---------
     Question(
         id="dsi.donnees.data",
         kind="open",
-        section="8. Gestion des donnees & patrimoine documentaire",
+        section="8. Gestion des données & patrimoine documentaire",
         label="Donnees manipulees",
         prompt=(
-            "Quelles sont les donnees cles produites ou consommees par la DSI ? "
-            "Precisez la sensibilite, la volumetrie et la qualite."
+            "Quelles sont les données clés produites ou consommees par la DSI ? "
+            "Precisez la sensibilité, la volumétrie et la qualité."
         ),
-        example="Donnees clients (PII) 1,2 M enregistrements, donnees de transaction 4 M/mois.",
+        example="Données clients (PII) 1,2 M enregistrements, données de transaction 4 M/mois.",
         target=Target(table=8, row=1, col=1),
     ),
     Question(
         id="dsi.donnees.documents",
         kind="open",
-        section="8. Gestion des donnees & patrimoine documentaire",
+        section="8. Gestion des données & patrimoine documentaire",
         label="Liste des documents critiques",
         prompt=(
-            "Quels fichiers, registres ou contrats sont necessaires a l'activite ? "
+            "Quels fichiers, registres ou contrats sont nécessaires à l'activité ? "
             "Indiquez le format (papier / electronique) et la localisation."
         ),
-        help="Le detail ligne a ligne sera repris dans l'annexe Documents et fichiers critiques.",
+        help="Le détail ligne a ligne sera repris dans l'annexe Documents et fichiers critiques.",
         example="Contrats editeurs (electronique, GED juridique), registre des habilitations (electronique).",
         target=Target(table=8, row=2, col=1),
     ),
@@ -434,7 +428,7 @@ DSI_PLAN: List[Question] = [
         section="9. Projets et budget SI",
         label="Budget & Couts IT",
         prompt=(
-            "Comment se structure le budget IT (CAPEX / OPEX), et quels sont les couts "
+            "Comment se structure le budget IT (CAPEX / OPEX), et quels sont les coûts "
             "de maintenance et d'infrastructure ?"
         ),
         example="Budget 2026 : 12 MTND dont 60% OPEX ; maintenance editeurs 2,4 MTND.",
@@ -447,11 +441,11 @@ DSI_PLAN: List[Question] = [
         section="10. Ecosysteme, partenaires & collaborateurs cles",
         label="Correspondants internes / externes",
         prompt=(
-            "Quelles sont vos interactions cles, internes et externes ? Precisez le type de flux, "
-            "les interdependances, le sens des flux et les canaux utilises."
+            "Quelles sont vos interactions clés, internes et externes ? Precisez le type de flux, "
+            "les interdependances, le sens des flux et les canaux utilisés."
         ),
-        help="Le detail ligne a ligne sera repris dans les annexes Echanges d'informations.",
-        example="Toutes directions metier en interne ; BCT, SIBTEL et editeurs en externe.",
+        help="Le détail ligne a ligne sera repris dans les annexes Échanges d'informations.",
+        example="Toutes directions métier en interne ; BCT, SIBTEL et editeurs en externe.",
         target=Target(table=10, row=1, col=1),
     ),
     Question(
@@ -471,9 +465,9 @@ DSI_PLAN: List[Question] = [
         kind="open",
         section="10. Ecosysteme, partenaires & collaborateurs cles",
         label="Collaborateurs cles & metiers d'expertise",
-        prompt="Quels profils presentent une expertise rare ou n'ont pas de binome identifie ?",
-        help="Le detail nominatif sera repris dans l'annexe Collaborateurs cles.",
-        example="Un seul expert AIX, un seul administrateur monetique.",
+        prompt="Quels profils presentent une expertise rare ou n'ont pas de binome identifié ?",
+        help="Le détail nominatif sera repris dans l'annexe Collaborateurs clés.",
+        example="Un seul expert AIX, un seul administrateur monétique.",
         target=Target(table=10, row=3, col=1),
     ),
     # --- 11. Risques IT et historique des incidents (table 11) --------------
@@ -483,12 +477,12 @@ DSI_PLAN: List[Question] = [
         section="11. Risques IT et historique des incidents",
         label="Risques IT & Securite",
         prompt=(
-            "Quels risques cyber avez-vous identifies ? Qu'en est-il de l'obsolescence technique, "
+            "Quels risques cyber avez-vous identifiés ? Qu'en est-il de l'obsolescence technique, "
             "des sauvegardes et du plan de secours informatique (PSI) ?"
         ),
         example=(
             "Ransomware et phishing en tete ; 15% du parc serveur en fin de support ; "
-            "sauvegardes quotidiennes externalisees ; PSI teste une fois par an."
+            "sauvegardes quotidiennes externalisées ; PSI teste une fois par an."
         ),
         target=Target(table=11, row=1, col=1),
     ),
@@ -498,10 +492,10 @@ DSI_PLAN: List[Question] = [
         section="11. Risques IT et historique des incidents",
         label="Historique des incidents majeurs",
         prompt=(
-            "Quels incidents majeurs ont impacte la continuite d'activite de l'entite ? "
-            "Precisez la date, la duree et l'impact."
+            "Quels incidents majeurs ont impacté la continuité d'activité de l'entité ? "
+            "Precisez la date, la durée et l'impact."
         ),
-        example="Mars 2025 : coupure SAN, 6h d'indisponibilite du core banking, agences en mode degrade.",
+        example="Mars 2025 : coupure SAN, 6h d'indisponibilité du core banking, agences en mode dégradé.",
         target=Target(table=11, row=2, col=1),
     ),
     # --- 12. Recueil des besoins (table 12) ---------------------------------
@@ -532,8 +526,8 @@ ENTITE_PLAN: List[Question] = [
         section="2. Organisation, gouvernance & effectifs",
         label="Organigramme & Repartition",
         prompt=(
-            "Decrivez l'organisation de votre entite : effectif total, repartition par "
-            "pole ou equipe, et roles cles."
+            "Décrivez l'organisation de votre entité : effectif total, répartition par "
+            "pôle ou équipe, et rôles clés."
         ),
         example="18 collaborateurs : 1 directeur, 3 chefs de service, 14 gestionnaires.",
         target=Target(table=2, row=1, col=1),
@@ -543,20 +537,20 @@ ENTITE_PLAN: List[Question] = [
         kind="open",
         section="2. Organisation, gouvernance & effectifs",
         label="Gouvernance",
-        prompt="Quels comites existent, et comment le pilotage et les decisions sont-ils organises ?",
-        example="Comite hebdomadaire de service, reporting mensuel au COMEX.",
+        prompt="Quels comités existent, et comment le pilotage et les décisions sont-ils organisés ?",
+        example="Comité hebdomadaire de service, reporting mensuel au COMEX.",
         target=Target(table=2, row=2, col=1),
     ),
     Question(
         id="ent.activites.grid",
         kind="grid",
-        section="3. Activites et processus metiers",
-        label="Activites et processus metiers",
+        section="3. Activités et processus métiers",
+        label="Activités et processus métiers",
         prompt=(
-            "Cartographions vos activites. Pour chaque domaine, quels sont les processus "
-            "et les macro-activites associees ?"
+            "Cartographions vos activités. Pour chaque domaine, quels sont les processus "
+            "et les macro-activités associées ?"
         ),
-        example="Credit | Octroi | Analyse et instruction des dossiers de credit",
+        example="Crédit | Octroi | Analyse et instruction des dossiers de crédit",
         columns=COLS_ACTIVITES,
         target=Target(table=3, mode="rows"),
         min_rows=2,
@@ -564,18 +558,18 @@ ENTITE_PLAN: List[Question] = [
     Question(
         id="ent.contraintes.grid",
         kind="grid",
-        section="4. Contraintes operationnelles et periodes critiques",
-        label="Contraintes operationnelles et periodes critiques",
+        section="4. Contraintes opérationnelles et périodes critiques",
+        label="Contraintes opérationnelles et périodes critiques",
         prompt=(
-            "Pour ces memes processus, quelles contraintes operationnelles s'appliquent "
-            "et quelles sont les periodes critiques ?"
+            "Pour ces mêmes processus, quelles contraintes opérationnelles s'appliquent "
+            "et quelles sont les périodes critiques ?"
         ),
         help=(
             "Contraintes operationnelles : exigences reglementaires, juridiques, contractuelles "
-            "ou de confidentialite. Periodes critiques : periodes de forte activite ou a forts "
-            "enjeux (cloture mensuelle / annuelle, debut de mois)."
+            "ou de confidentialite. Périodes critiques : périodes de forte activité ou a forts "
+            "enjeux (clôture mensuelle / annuelle, debut de mois)."
         ),
-        example="Credit | Octroi | Delai reglementaire de reponse 15 jours | Fin de trimestre",
+        example="Crédit | Octroi | Délai réglementaire de réponse 15 jours | Fin de trimestre",
         columns=COLS_CONTRAINTES,
         target=Target(table=4, mode="rows"),
     ),
@@ -586,38 +580,38 @@ ENTITE_PLAN: List[Question] = [
         label="Applications & couverture fonctionnelle",
         prompt=(
             "Quelles applications utilisez-vous ? Pour chacune : domaine, processus, "
-            "couverture fonctionnelle et criticite SI (V, C, MC, PC)."
+            "couverture fonctionnelle et criticité SI (V, C, MC, PC)."
         ),
         help=(
             "Criticite SI - Vitale (V), Critique (C), Moyennement critique (MC), Peu critique (PC)."
         ),
-        example="Credit | Octroi | Delta Credit | Instruction et deblocage | V",
+        example="Crédit | Octroi | Delta Crédit | Instruction et deblocage | V",
         columns=COLS_APPLICATIONS,
         target=Target(table=5, mode="rows"),
     ),
     Question(
         id="ent.donnees.data",
         kind="open",
-        section="6. Gestion des donnees & patrimoine documentaire",
+        section="6. Gestion des données & patrimoine documentaire",
         label="Donnees manipulees",
         prompt=(
-            "Quelles donnees cles produisez-vous ou consommez-vous ? Precisez la sensibilite, "
-            "la volumetrie et la qualite."
+            "Quelles données clés produisez-vous ou consommez-vous ? Precisez la sensibilité, "
+            "la volumétrie et la qualité."
         ),
-        example="Dossiers clients avec pieces d'identite, environ 300 nouveaux dossiers par mois.",
+        example="Dossiers clients avec pieces d'identité, environ 300 nouveaux dossiers par mois.",
         target=Target(table=6, row=1, col=1),
     ),
     Question(
         id="ent.donnees.documents",
         kind="open",
-        section="6. Gestion des donnees & patrimoine documentaire",
+        section="6. Gestion des données & patrimoine documentaire",
         label="Liste des documents critiques",
         prompt=(
-            "Quels fichiers, registres ou contrats sont necessaires a votre activite ? "
+            "Quels fichiers, registres ou contrats sont nécessaires à votre activité ? "
             "Indiquez le format (papier / electronique) et la localisation."
         ),
-        help="Le detail ligne a ligne sera repris dans l'annexe Documents et fichiers critiques.",
-        example="Dossiers de garantie papier en archive, echeanciers dans la GED.",
+        help="Le détail ligne a ligne sera repris dans l'annexe Documents et fichiers critiques.",
+        example="Dossiers de garantie papier en archive, échéanciers dans la GED.",
         target=Target(table=6, row=2, col=1),
     ),
     Question(
@@ -626,10 +620,10 @@ ENTITE_PLAN: List[Question] = [
         section="7. Ecosysteme, partenaires & collaborateurs cles",
         label="Correspondants internes / externes",
         prompt=(
-            "Quelles sont vos interactions cles, internes et externes ? Precisez le type de flux, "
-            "les interdependances, le sens des flux et les canaux utilises."
+            "Quelles sont vos interactions clés, internes et externes ? Precisez le type de flux, "
+            "les interdependances, le sens des flux et les canaux utilisés."
         ),
-        help="Le detail ligne a ligne sera repris dans les annexes Echanges d'informations.",
+        help="Le détail ligne a ligne sera repris dans les annexes Échanges d'informations.",
         example="Agences et Direction des Risques en interne ; notaires et huissiers en externe.",
         target=Target(table=7, row=1, col=1),
     ),
@@ -638,8 +632,8 @@ ENTITE_PLAN: List[Question] = [
         kind="open",
         section="7. Ecosysteme, partenaires & collaborateurs cles",
         label="Collaborateurs cles & metiers d'expertise",
-        prompt="Quels profils presentent une expertise rare ou n'ont pas de binome identifie ?",
-        help="Le detail nominatif sera repris dans l'annexe Collaborateurs cles.",
+        prompt="Quels profils presentent une expertise rare ou n'ont pas de binome identifié ?",
+        help="Le détail nominatif sera repris dans l'annexe Collaborateurs clés.",
         example="Un seul juriste specialise en recouvrement contentieux.",
         target=Target(table=7, row=2, col=1),
     ),
@@ -649,8 +643,8 @@ ENTITE_PLAN: List[Question] = [
         section="8. Historique des incidents",
         label="Historique des incidents majeurs",
         prompt=(
-            "Quels incidents majeurs ont impacte la continuite de votre activite ? "
-            "Precisez la date, la duree et l'impact."
+            "Quels incidents majeurs ont impacté la continuité de votre activité ? "
+            "Precisez la date, la durée et l'impact."
         ),
         example="Janvier 2026 : indisponibilite GED pendant 2 jours, instruction ralentie.",
         target=Target(table=8, row=1, col=1),
@@ -673,10 +667,10 @@ ENTITE_PLAN: List[Question] = [
         section="9. Recueil des besoins & axes d'amelioration",
         label="Projets a venir",
         prompt=(
-            "Quelles initiatives metier sont planifiees a court ou moyen terme "
+            "Quelles initiatives métier sont planifiees a court ou moyen terme "
             "avec un impact sur le SI ?"
         ),
-        example="Lancement d'une offre de credit en ligne au S2 2026.",
+        example="Lancement d'une offre de crédit en ligne au S2 2026.",
         target=Target(table=9, row=2, col=1),
     ),
     *_annexes("ent", t_int=10, t_ext=11, t_collab=12, t_appli=13, t_docs=14),

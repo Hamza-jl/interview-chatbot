@@ -25,7 +25,7 @@ class Entry:
     aliases: tuple[str, ...] = ()
 
 
-TEMPLATE_SOURCE = "Modele client - Etat des lieux"
+TEMPLATE_SOURCE = "Modèle client - État des lieux"
 DOMAIN_SOURCE = "Referentiel PCA Devoteam / ISO 22301"
 
 
@@ -34,38 +34,38 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Criticite SI (V / C / MC / PC)",
         definition=(
-            "Niveau de dependance d'un processus metier a une application :\n"
-            "- Vitale (V) : le processus metier est arrete en cas d'indisponibilite de l'application ;\n"
-            "- Critique (C) : le processus necessite un travail manuel pour contourner l'application ;\n"
-            "- Moyennement critique (MC) : le processus necessite un contournement de l'application "
+            "Niveau de dépendance d'un processus métier à une application :\n"
+            "- Vitale (V) : le processus métier est arrêté en cas d'indisponibilité de l'application ;\n"
+            "- Critique (C) : le processus nécessite un travail manuel pour contourner l'application ;\n"
+            "- Moyennement critique (MC) : le processus nécessite un contournement de l'application "
             "indisponible par une autre application ;\n"
-            "- Peu critique (PC) : le processus metier reste operationnel et est peu impacte."
+            "- Peu critique (PC) : le processus métier reste opérationnel et est peu impacté."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("criticite", "vitale", "critique", "moyennement critique", "peu critique",
-                 "criticite application", "niveau de criticite si", "criticite si",
+                 "criticite application", "niveau de criticité si", "criticite si",
                  "v c mc pc", "v/c/mc/pc", "vcmcpc"),
     ),
     Entry(
-        term="Niveau de criticite d'un flux interne (A / B / C / D)",
+        term="Niveau de criticité d'un flux interne (A / B / C / D)",
         definition=(
-            "Criticite d'un echange d'informations avec un correspondant interne :\n"
-            "- A : ne peut pas etre traite manuellement (le SI est indispensable) ;\n"
-            "- B : peut etre traite manuellement de facon limitee dans le temps ;\n"
+            "Criticité d'un échange d'informations avec un correspondant interne :\n"
+            "- A : ne peut pas être traité manuellement (le SI est indispensable) ;\n"
+            "- B : peut être traité manuellement de facon limitée dans le temps ;\n"
             "- C : peut etre traite manuellement ;\n"
             "- D : peut etre arrete."
         ),
         source=TEMPLATE_SOURCE,
-        aliases=("flux interne", "niveau de criticite", "criticite flux", "abcd",
+        aliases=("flux interne", "niveau de criticité", "criticite flux", "abcd",
                  "echanges internes", "criticite echange"),
     ),
     Entry(
         term="Collaborateur cle",
         definition=(
-            "Est considere comme collaborateur cle :\n"
+            "Est considéré comme collaborateur clé :\n"
             "- tout collaborateur qui dispose d'une expertise rare ou pointue ;\n"
             "- tout collaborateur qui assure une tache tout seul ;\n"
-            "- tout collaborateur dont le potentiel d'encadrement est affirme au sein de l'equipe."
+            "- tout collaborateur dont le potentiel d'encadrement est affirme au sein de l'équipe."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("collaborateurs cles", "personne cle", "homme cle", "expertise rare",
@@ -74,7 +74,7 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Typologie de correspondants (Mono / Multi)",
         definition=(
-            "Pour les echanges externes, il convient de preciser la typologie du correspondant :\n"
+            "Pour les échanges externes, il convient de préciser la typologie du correspondant :\n"
             "- Mono-correspondant : un seul interlocuteur possible, en precisant s'il est ou non "
             "en situation de monopole ;\n"
             "- Multi-correspondants : plusieurs interlocuteurs alternatifs existent."
@@ -86,8 +86,8 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Contraintes operationnelles",
         definition=(
-            "Exigences reglementaires, juridiques, contractuelles ou de confidentialite qui "
-            "pesent sur un processus et limitent la facon dont il peut etre execute ou "
+            "Exigences réglementaires, juridiques, contractuelles ou de confidentialite qui "
+            "pesent sur un processus et limitent la facon dont il peut être execute ou "
             "contourne en situation degradee."
         ),
         source=TEMPLATE_SOURCE,
@@ -96,9 +96,9 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Periodes critiques",
         definition=(
-            "Periodes de forte activite ou a forts enjeux pour l'entite, par exemple la cloture "
+            "Périodes de forte activité ou a forts enjeux pour l'entité, par exemple la cloture "
             "mensuelle ou annuelle, ou le debut de mois. Une interruption survenant pendant ces "
-            "periodes a un impact nettement superieur."
+            "périodes à un impact nettement superieur."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("periode critique", "pic d'activite", "cloture", "saisonnalite"),
@@ -107,7 +107,7 @@ GLOSSARY: List[Entry] = [
         term="Couverture fonctionnelle",
         definition=(
             "Perimetre reellement couvert par une application au sein d'un processus : quelles "
-            "etapes du processus l'outil prend en charge, et lesquelles restent manuelles."
+            "étapes du processus l'outil prend en charge, et lesquelles restent manuelles."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("couverture", "perimetre applicatif"),
@@ -115,9 +115,9 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Contournement envisageable",
         definition=(
-            "Mode operatoire de secours permettant de poursuivre le processus metier lorsque "
-            "l'application est indisponible : procedure manuelle, application alternative, "
-            "ou report de traitement - en precisant la duree pendant laquelle il reste tenable."
+            "Mode operatoire de secours permettant de poursuivre le processus métier lorsque "
+            "l'application est indisponible : procédure manuelle, application alternative, "
+            "ou report de traitement - en precisant la durée pendant laquelle il reste tenable."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("contournement", "mode degrade", "solution de secours", "workaround"),
@@ -125,8 +125,8 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Vis-a-vis",
         definition=(
-            "Dans la fiche de suivi, le ou les interlocuteurs de l'entite rencontres lors de "
-            "l'atelier d'etat des lieux, par opposition au redacteur qui formalise le compte rendu."
+            "Dans la fiche de suivi, le ou les interlocuteurs de l'entité rencontres lors de "
+            "l'atelier d'État des lieux, par opposition au rédacteur qui formalise le compte rendu."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("interlocuteur", "vis a vis"),
@@ -134,28 +134,28 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Macro activite",
         definition=(
-            "Activite operationnelle concrete realisee dans le cadre d'un processus. Elle se "
-            "situe entre le processus (vue d'ensemble) et la tache elementaire (geste metier)."
+            "Activité opérationnelle concrete réalisée dans le cadre d'un processus. Elle se "
+            "situe entre le processus (vue d'ensemble) et la tache elementaire (geste métier)."
         ),
         source=TEMPLATE_SOURCE,
         aliases=("macro-activite", "activite", "macro activites"),
     ),
     # ---------------- Tier 2: PCA vocabulary --------------------------------
     Entry(
-        term="PCA - Plan de Continuite d'Activite",
+        term="PCA - Plan de Continuité d'Activité",
         definition=(
-            "Ensemble documente de procedures et de moyens permettant a un organisme de "
-            "poursuivre ses activites essentielles a un niveau acceptable predefini lors d'une "
-            "interruption, puis de revenir a un fonctionnement normal."
+            "Ensemble documente de procédures et de moyens permettant à un organisme de "
+            "poursuivre ses activités essentielles à un niveau acceptable predefini lors d'une "
+            "interruption, puis de revenir à un fonctionnement normal."
         ),
         source=DOMAIN_SOURCE,
-        aliases=("plan de continuite", "continuite d'activite", "bcp", "business continuity"),
+        aliases=("plan de continuité", "continuite d'activite", "bcp", "business continuity"),
     ),
     Entry(
-        term="BIA - Bilan d'Impact sur l'Activite",
+        term="BIA - Bilan d'Impact sur l'Activité",
         definition=(
-            "Analyse qui identifie les activites critiques d'une entite, evalue les consequences "
-            "d'une interruption dans le temps (financieres, reglementaires, image, humaines) et "
+            "Analyse qui identifié les activités critiques d'une entité, évalué les conséquences "
+            "d'une interruption dans le temps (financieres, réglementaires, image, humaines) et "
             "en deduit les objectifs de reprise (DMIA / RTO et PDMA / RPO)."
         ),
         source=DOMAIN_SOURCE,
@@ -164,55 +164,55 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="DMIA / RTO - Duree Maximale d'Interruption Admissible",
         definition=(
-            "Delai maximal pendant lequel une activite peut rester indisponible avant que les "
-            "consequences ne deviennent inacceptables. C'est la cible de delai de reprise."
+            "Délai maximal pendant lequel une activité peut rester indisponible avant que les "
+            "conséquences ne deviennent inacceptables. C'est la cible de délai de reprise."
         ),
         source=DOMAIN_SOURCE,
-        aliases=("dmia", "rto", "duree maximale d'interruption", "delai de reprise"),
+        aliases=("dmia", "rto", "duree maximale d'interruption", "délai de reprise"),
     ),
     Entry(
-        term="PDMA / RPO - Perte de Donnees Maximale Admissible",
+        term="PDMA / RPO - Perte de Données Maximale Admissible",
         definition=(
-            "Volume de donnees, exprime en temps, qu'une entite accepte de perdre en cas de "
-            "sinistre. Il determine la frequence des sauvegardes et des replications."
+            "Volume de données, exprime en temps, qu'une entité accepte de perdre en cas de "
+            "sinistre. Il determine la fréquence des sauvegardes et des replications."
         ),
         source=DOMAIN_SOURCE,
-        aliases=("pdma", "rpo", "perte de donnees", "frequence de sauvegarde"),
+        aliases=("pdma", "rpo", "perte de données", "fréquence de sauvegarde"),
     ),
     Entry(
         term="PSI - Plan de Secours Informatique",
         definition=(
-            "Volet technique du PCA : dispositif permettant de redemarrer les systemes "
-            "d'information sur un site ou une infrastructure de secours dans les delais cibles. "
-            "Egalement appele PRA (Plan de Reprise d'Activite) ou DRP."
+            "Volet technique du PCA : dispositif permettant de redemarrer les systèmes "
+            "d'information sur un site ou une infrastructure de secours dans les délais cibles. "
+            "Également appele PRA (Plan de Reprise d'Activité) ou DRP."
         ),
         source=DOMAIN_SOURCE,
         aliases=("psi", "pra", "drp", "plan de reprise", "plan de secours", "site de secours"),
     ),
     Entry(
-        term="SDSI - Schema Directeur des Systemes d'Information",
+        term="SDSI - Schema Directeur des Systèmes d'Information",
         definition=(
-            "Document strategique qui aligne le systeme d'information sur la strategie de "
-            "l'entreprise et definit la trajectoire d'evolution du SI sur 3 a 5 ans."
+            "Document stratégique qui aligne le système d'information sur la stratégie de "
+            "l'entreprise et definit la trajectoire d'évolution du SI sur 3 a 5 ans."
         ),
         source=DOMAIN_SOURCE,
         aliases=("sdsi", "schema directeur"),
     ),
     Entry(
-        term="SMCA - Systeme de Management de la Continuite d'Activite",
+        term="SMCA - Système de Management de la Continuité d'Activité",
         definition=(
             "Dispositif de gouvernance, au sens de la norme ISO 22301, qui pilote la mise en "
-            "place, le maintien en conditions operationnelles et l'amelioration continue du PCA."
+            "place, le maintien en conditions opérationnelles et l'amelioration continue du PCA."
         ),
         source=DOMAIN_SOURCE,
-        aliases=("smca", "iso 22301", "management de la continuite"),
+        aliases=("smca", "iso 22301", "management de la continuité"),
     ),
     Entry(
         term="Processus metier",
         definition=(
-            "Enchainement d'activites qui transforme des entrees en un resultat ayant une valeur "
-            "pour un client interne ou externe. C'est la maille a laquelle le PCA evalue la "
-            "criticite et fixe les objectifs de reprise."
+            "Enchainement d'activités qui transforme des entrées en un résultat ayant une valeur "
+            "pour un client interne ou externe. C'est la maille a laquelle le PCA évalué la "
+            "criticité et fixe les objectifs de reprise."
         ),
         source=DOMAIN_SOURCE,
         aliases=("processus", "process"),
@@ -220,8 +220,8 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Domaine",
         definition=(
-            "Regroupement fonctionnel de haut niveau qui rassemble plusieurs processus de meme "
-            "nature (par exemple : Credit, Monetique, Production informatique, Ressources Humaines)."
+            "Regroupement fonctionnel de haut niveau qui rassemble plusieurs processus de même "
+            "nature (par exemple : Crédit, Monétique, Production informatique, Ressources Humaines)."
         ),
         source=DOMAIN_SOURCE,
         aliases=("domaine fonctionnel", "grand domaine"),
@@ -229,8 +229,8 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Mode degrade",
         definition=(
-            "Fonctionnement transitoire durant lequel l'activite se poursuit avec des moyens "
-            "reduits - procedures manuelles, service partiel - en attendant le retour a la normale."
+            "Fonctionnement transitoire durant lequel l'activité se poursuit avec des moyens "
+            "reduits - procédures manuelles, service partiel - en attendant le retour à la normale."
         ),
         source=DOMAIN_SOURCE,
         aliases=("degrade", "fonctionnement degrade", "procedure manuelle"),
@@ -239,7 +239,7 @@ GLOSSARY: List[Entry] = [
         term="SLA - Accord de niveau de service",
         definition=(
             "Engagement contractuel d'un fournisseur sur un niveau de service mesurable "
-            "(disponibilite, delai de retablissement, temps de reponse), assorti le cas echeant "
+            "(disponibilité, délai de retablissement, temps de réponse), assorti le cas echeant "
             "de penalites."
         ),
         source=DOMAIN_SOURCE,
@@ -248,9 +248,9 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Obsolescence technique",
         definition=(
-            "Situation dans laquelle un composant materiel ou logiciel n'est plus supporte par "
-            "son editeur ou constructeur, ce qui prive l'organisation de correctifs de securite "
-            "et augmente le risque d'indisponibilite."
+            "Situation dans laquelle un composant matériel ou logiciel n'est plus supporte par "
+            "son editeur ou constructeur, ce qui prive l'organisation de correctifs de sécurité "
+            "et augmente le risque d'indisponibilité."
         ),
         source=DOMAIN_SOURCE,
         aliases=("obsolescence", "fin de support", "end of life", "eol"),
@@ -258,8 +258,8 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Urbanisation du SI",
         definition=(
-            "Discipline qui organise le systeme d'information en zones, quartiers et blocs "
-            "fonctionnels coherents afin de maitriser les dependances et de faciliter son evolution."
+            "Discipline qui organisé le système d'information en zones, quartiers et blocs "
+            "fonctionnels coherents afin de maitriser les dépendances et de faciliter son évolution."
         ),
         source=DOMAIN_SOURCE,
         aliases=("urbanisation", "cartographie applicative", "architecture applicative"),
@@ -277,8 +277,8 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Infogerance",
         definition=(
-            "Delegation contractuelle a un prestataire externe de tout ou partie de "
-            "l'exploitation du systeme d'information."
+            "Delegation contractuelle à un prestataire externe de tout ou partie de "
+            "l'exploitation du système d'information."
         ),
         source=DOMAIN_SOURCE,
         aliases=("infogerance", "outsourcing", "tierce maintenance", "tma"),
@@ -325,7 +325,7 @@ def search(query: str, limit: int = 3) -> List[Entry]:
     """Score entries by term / alias / body overlap. Deterministic and auditable.
 
     Returns [] when nothing clears MIN_RELEVANCE - saying "ce terme ne figure
-    pas dans le referentiel" is far better than serving a near-miss definition.
+    pas dans le référentiel" is far better than serving a near-miss définition.
     """
     q_norm = _norm(query)
     if not q_norm:
@@ -364,7 +364,7 @@ def search(query: str, limit: int = 3) -> List[Entry]:
 
 def render_context(entries: List[Entry]) -> str:
     if not entries:
-        return "(aucune definition correspondante dans le referentiel)"
+        return "(aucune définition correspondante dans le référentiel)"
     return "\n\n".join(
         f"### {e.term}\n{e.definition}\n(Source : {e.source})" for e in entries
     )

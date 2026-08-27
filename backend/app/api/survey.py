@@ -48,8 +48,8 @@ from app.schemas.api import (
 router = APIRouter(tags=["survey"])
 
 TEMPLATE_LABEL = {
-    "dsi": "Etat des lieux - Direction des Systemes d'Information",
-    "entite": "Etat des lieux - Entite",
+    "dsi": "État des lieux - Direction des Systèmes d'Information",
+    "entite": "État des lieux - Entité",
 }
 
 
@@ -380,7 +380,7 @@ def override_answer(
     )
     append_message(
         db, survey, dek, "assistant",
-        f"Correction enregistree pour « {question.label} » :\n\n{summary}",
+        f"Correction enregistrée pour « {question.label} » :\n\n{summary}",
         intent="correction", question_id=question.id,
     )
 
@@ -428,7 +428,7 @@ def export_session(
     if not answers:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Aucune reponse enregistree : le document serait vide.",
+            detail="Aucune réponse enregistrée : le document serait vide.",
         )
 
     template_path = os.path.join(settings.TEMPLATE_DIR, TEMPLATE_FILES[survey.template_kind])
@@ -519,7 +519,7 @@ def download_export(
     if hashlib.sha256(document).hexdigest() != record.sha256:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Le document a ete altere et ne peut pas etre servi.",
+            detail="Le document a ete altere et ne peut pas être servi.",
         )
 
     record.download_count += 1
@@ -597,7 +597,7 @@ def confirm_answer(
     survey = deps.load_active_session(db, principal.id, session_id)
     if survey.status == "completed":
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Cet entretien est cloture."
+            status_code=status.HTTP_409_CONFLICT, detail="Cet entretien est clôturé."
         )
 
     dek = unwrap_dek(survey.wrapped_dek)
@@ -612,7 +612,7 @@ def confirm_answer(
     if completeness == "vide":
         raise HTTPException(
             status_code=422,  # Unprocessable Content
-            detail="La reponse est vide. Completez-la ou passez la question.",
+            detail="La réponse est vide. Complétez-là où passez la question.",
         )
 
     store_answer(db, survey, dek, question, body, completeness, confirmed=True)
@@ -626,9 +626,9 @@ def confirm_answer(
     if completed:
         survey.status = "completed"
         survey.completed_at = utcnow()
-        reply_text = f"C'est valide, merci.\n\n{engine.closing(survey.structure.name)}"
+        reply_text = f"C'est validé, merci.\n\n{engine.closing(survey.structure.name)}"
     else:
-        reply_text = f"C'est valide, merci.\n\n{plan[cursor].prompt}"
+        reply_text = f"C'est validé, merci.\n\n{plan[cursor].prompt}"
 
     reply_row = append_message(
         db, survey, dek, "assistant", reply_text, intent="confirmation",

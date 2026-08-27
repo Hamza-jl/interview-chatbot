@@ -85,14 +85,17 @@ export function ThankYou({
             Merci {firstName} !
           </h2>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-300">
-            L&apos;etat des lieux de <strong className="text-ink-100">{state.structure.name}</strong>{" "}
-            {blank.length === 0 ? "est complet" : "est enregistre"}. Votre contribution alimente
-            directement le Plan de Continuite d&apos;Activite — nous mesurons le temps
-            et l&apos;attention que vous y avez consacres.
+            L&apos;état des lieux de l&apos;entité{" "}
+            <strong className="text-ink-100">{state.structure.name}</strong>{" "}
+            {blank.length === 0 ? "est finalisé" : "est enregistré"}. Votre contribution alimente
+            directement les deux projets SDSI et SMCA de MANSA Bank. Nous vous remercions du
+            temps et de l&apos;attention que vous y avez consacrés. Notre équipe analysera les
+            données collectées et reviendra vers vous pour d&apos;éventuels compléments
+            d&apos;informations.
           </p>
 
           <div className="mt-6 grid grid-cols-3 gap-2">
-            <Stat value={`${state.answered}`} label="points renseignes" />
+            <Stat value={`${state.answered}`} label="points renseignés" />
             <Stat value={`${state.sections.length}`} label="sections couvertes" />
             <Stat value={`${state.percent}%`} label="de couverture" />
           </div>
@@ -107,7 +110,7 @@ export function ThankYou({
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-300">
                 Ces rubriques apparaissent vides dans le document :{" "}
                 <span className="text-ink-200">{blank.map((s) => s.title).join(", ")}</span>. Vous
-                pouvez les completer avec votre consultant Devoteam.
+                pouvez les compléter avec votre consultant Devoteam.
               </p>
             </div>
           )}
@@ -132,7 +135,7 @@ export function ThankYou({
                     />
                   </svg>
                 )}
-                Telecharger
+                Télécharger
               </button>
             </div>
           </div>
@@ -142,7 +145,7 @@ export function ThankYou({
               <div className="mb-3 flex items-center gap-2.5">
                 <Logo size={22} />
                 <span className="text-xs font-semibold uppercase tracking-[.14em] text-ink-400">
-                  Une question ? Nous restons a votre disposition
+                  Une question ? Nous restons à votre disposition
                 </span>
               </div>
               <div className="space-y-1.5 text-sm">
@@ -157,20 +160,23 @@ export function ThankYou({
                   </svg>
                   {contact.email}
                 </a>
-                <a
-                  href={`tel:${contact.phone.replace(/\s/g, "")}`}
-                  className="flex items-center gap-2 text-ink-300 transition hover:text-poppy-500"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path
-                      d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5Z"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  {contact.phone}
-                </a>
+                {/* Rendered only when a number is configured. */}
+                {contact.phone && (
+                  <a
+                    href={`tel:${contact.phone.replace(/\s/g, "")}`}
+                    className="flex items-center gap-2 text-ink-300 transition hover:text-poppy-500"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5Z"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    {contact.phone}
+                  </a>
+                )}
               </div>
             </div>
           )}

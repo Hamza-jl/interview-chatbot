@@ -71,7 +71,7 @@ def password_problems(password: str, email: str = "") -> list[str]:
     if not re.search(r"\d", password):
         problems.append("Au moins un chiffre.")
     if not re.search(r"[^\w\s]", password):
-        problems.append("Au moins un caractere special.")
+        problems.append("Au moins un caractère special.")
     low = password.lower()
     if any(c in low for c in _COMMON):
         problems.append("Mot de passe trop previsible (terme courant detecte).")

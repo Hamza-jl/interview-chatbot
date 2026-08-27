@@ -115,7 +115,7 @@ export default function App() {
       /* the session is being discarded either way */
     }
     clearSession();
-    if (reason === "idle") notify("Deconnexion automatique apres 15 minutes d'inactivite.");
+    if (reason === "idle") notify("Déconnexion automatique après 15 minutes d'inactivité.");
   }
 
   return (
@@ -126,7 +126,7 @@ export default function App() {
         <div className="grid min-h-screen place-items-center">
           <div className="flex flex-col items-center gap-4">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-ink-600 border-t-poppy-500" />
-            <p className="text-sm text-ink-400">Ouverture de l&apos;espace securise…</p>
+            <p className="text-sm text-ink-400">Ouverture de l&apos;espace sécurisé…</p>
           </div>
         </div>
       )}

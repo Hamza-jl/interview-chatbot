@@ -98,9 +98,9 @@ class Settings(BaseSettings):
     CRYPTO_NAMESPACE: str = "interview-collect"
 
     # ---- closing card --------------------------------------------------------
-    CONTACT_NAME: str = "Equipe PCA"
+    CONTACT_NAME: str = "Équipe PCA"
     CONTACT_EMAIL: str = "pca@example.com"
-    CONTACT_PHONE: str = "+00 00 000 000"
+    CONTACT_PHONE: str = ""          # empty hides the line entirely
 
     @field_validator("MASTER_KEK")
     @classmethod

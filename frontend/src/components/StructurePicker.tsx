@@ -76,10 +76,7 @@ export function StructurePicker({
           Quelle structure allons-nous <span className="text-poppy-500">documenter</span> ?
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-300">
-          Selectionnez l&apos;entite dont vous avez la responsabilite. Le questionnaire s&apos;adapte
-          automatiquement : le modele « Direction des Systemes d&apos;Information » couvre
-          l&apos;architecture, l&apos;infrastructure et le budget SI, le modele « Entite » se
-          concentre sur les processus metier.
+          Sélectionnez l&apos;entité dont vous avez la responsabilité.
         </p>
       </motion.header>
 
@@ -144,7 +141,7 @@ export function StructurePicker({
                         </span>
                         {structure.template_kind === "dsi" && (
                           <span className="rounded-md bg-accent-fire/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent-fire">
-                            Modele DSI
+                            Modèle DSI
                           </span>
                         )}
                       </div>
@@ -183,7 +180,7 @@ export function StructurePicker({
                       </div>
                       <span className="text-[11px] font-medium text-ink-400">
                         {progress.status === "completed"
-                          ? "Termine"
+                          ? "Terminé"
                           : `Repris a ${progress.percent}%`}
                       </span>
                     </div>
@@ -197,14 +194,14 @@ export function StructurePicker({
 
       {structures && visible.length === 0 && (
         <p className="mt-8 text-center text-sm text-ink-400">
-          Aucune structure ne correspond a votre recherche.
+          Aucune structure ne correspond à votre recherche.
         </p>
       )}
 
       <div className="sticky bottom-5 mt-8 flex justify-center">
         <button onClick={start} disabled={!selected || busy} className="btn-primary min-w-[16rem]">
           {busy ? <Spinner /> : null}
-          {busy ? "Ouverture de l'entretien…" : "Demarrer l'entretien"}
+          {busy ? "Ouverture de l'entretien…" : "Démarrer l'entretien"}
         </button>
       </div>
     </div>

@@ -48,23 +48,23 @@ CLASSIFY_SCHEMA: Dict[str, Any] = {
 
 CLASSIFY_SYSTEM = """Tu classes le message d'un interlocuteur pendant un entretien professionnel.
 
-- "question" : il demande une explication, une definition, un exemple, ou dit qu'il
+- "question" : il demande une explication, une définition, un exemple, ou dit qu'il
   ne comprend pas. Souvent un "?", "qu'est-ce que", "c'est quoi", "que signifie".
 - "navigation" : il veut passer, revenir en arriere, repeter ou arreter. Souvent
   "je ne sais pas", "je n'ai pas cette information", "passons", "suivant".
-- "reponse" : il donne une information factuelle qui repond a la question posee.
+- "reponse" : il donne une information factuelle qui repond à la question posee.
 - "hors_sujet" : le message n'a aucun rapport avec l'entretien.
 - "salutation" : UNIQUEMENT une formule de politesse isolee, qui ne contient
   aucune information - « bonjour », « merci », « d'accord ». Un nom de personne,
-  meme seul et sans verbe, est une "reponse", jamais une salutation.
+  même seul et sans verbe, est une "reponse", jamais une salutation.
 
 Exemples :
-Message: "42 collaborateurs dans 4 poles." -> reponse
-Message: "Qu'est-ce que la criticite SI ?" -> question
+Message: "42 collaborateurs dans 4 pôles." -> reponse
+Message: "Qu'est-ce que la criticité SI ?" -> question
 Message: "Je ne dispose pas de cette information." -> navigation
-Message: "Comite SI mensuel preside par le DGA." -> reponse
+Message: "Comité SI mensuel preside par le DGA." -> reponse
 Message: "Pouvez-vous me donner un exemple ?" -> question
-Message: "Delta Credit, vital, contournement papier." -> reponse
+Message: "Delta Crédit, vital, contournement papier." -> reponse
 Message: "quel temps fait-il aujourd'hui" -> hors_sujet
 Message: "bonjour" -> salutation
 Message: "merci beaucoup" -> salutation
@@ -106,13 +106,13 @@ VALUE_SCHEMA: Dict[str, Any] = {
     "required": ["value"],
 }
 
-REWRITE_SYSTEM = """Tu reformules la reponse d'un interlocuteur pour un rapport d'audit.
+REWRITE_SYSTEM = """Tu reformules la réponse d'un interlocuteur pour un rapport d'audit.
 
-REGLE ABSOLUE : reste strictement fidele au message. N'ajoute aucun chiffre,
+RÈGLE ABSOLUE : reste strictement fidele au message. N'ajoute aucun chiffre,
 aucun nom, aucune information qui ne soit pas dans le message. Si le message est
 vague, reste vague.
 
-Ecris une a trois phrases sobres en francais, a la troisieme personne, sans
+Ecris une à trois phrases sobres en francais, a la troisieme personne, sans
 formule de politesse. Renvoie uniquement le champ value."""
 
 
@@ -139,12 +139,12 @@ FIELD_SYSTEM = """Tu extrais UNE valeur courte depuis le message d'un interlocut
 La valeur alimente une cellule de fiche de suivi : un nom, une fonction, une date.
 - Renvoie uniquement la valeur, sans phrase, sans verbe, sans article introductif.
 - Retire les formules du type « c'est », « il s'agit de », « le responsable est ».
-- Conserve les titres (M., Mme) et les fonctions PRESENTS dans le message.
+- Conserve les titres (M., Mme) et les fonctions PRÉSENTS dans le message.
 - N'ajoute jamais un titre absent : « Karim Trabelsi » reste « Karim Trabelsi ».
 - N'invente rien. Si le message ne contient pas de valeur, renvoie une chaine vide.
 
 Exemples :
-Message: "c'est Mme Sonia Ben Ammar qui dirige l'entite" -> "Mme Sonia Ben Ammar"
+Message: "c'est Mme Sonia Ben Ammar qui dirige l'entité" -> "Mme Sonia Ben Ammar"
 Message: "le responsable est M. Karim Trabelsi, chef de production"
   -> "M. Karim Trabelsi, chef de production"
 Message: "Mme Ines Gharbi" -> "Mme Ines Gharbi"
@@ -208,13 +208,13 @@ def _columns_doc(question: Question) -> str:
 
 EXTRACT_SYSTEM = """Tu extrais des lignes de tableau depuis le message d'un interlocuteur.
 
-REGLES
-- Une ligne par element concret cite dans le message.
-- Remplis CHAQUE colonne, en commencant par la premiere. Ne decale jamais les
+RÈGLES
+- Une ligne par élément concret cite dans le message.
+- Remplis CHAQUE colonne, en commencant par la première. Ne decale jamais les
   valeurs d'une colonne vers la suivante.
-- N'invente rien. Si une colonne n'est pas precisee, mets une chaine vide.
-- Si le message utilise le caractere « | », chaque ligne du message est une ligne
-  du tableau et chaque segment correspond a une colonne, dans l'ordre.
+- N'invente rien. Si une colonne n'est pas précisée, mets une chaine vide.
+- Si le message utilisé le caractère « | », chaque ligne du message est une ligne
+  du tableau et chaque segment correspond à une colonne, dans l'ordre.
 
 Renvoie uniquement le champ rows."""
 
@@ -326,7 +326,7 @@ def answer_definition(message: str, question: Question) -> str:
             )
         if question.help:
             parts.append(question.help)
-        parts.append(f"Pour revenir a notre point : {question.prompt}")
+        parts.append(f"Pour revenir à notre point : {question.prompt}")
         return "\n\n".join(parts)
 
     hits = glossary.search(message, limit=2)
@@ -334,7 +334,7 @@ def answer_definition(message: str, question: Question) -> str:
         body = "\n\n".join(f"**{entry.term}**\n{entry.definition}" for entry in hits)
         return f"{body}\n\nPour revenir a notre point : {question.prompt}"
     return (
-        "Ce terme ne figure pas dans le referentiel de l'atelier. Je note votre question "
+        "Ce terme ne figure pas dans le référentiel de l'atelier. Je note votre question "
         "pour le consultant Devoteam, qui vous repondra precisement.\n\n"
-        f"Pour revenir a notre point : {question.prompt}"
+        f"Pour revenir à notre point : {question.prompt}"
     )

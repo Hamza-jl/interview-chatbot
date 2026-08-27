@@ -5,11 +5,11 @@ import { AmbientGlow, Wordmark } from "./Brand";
 import { Spinner } from "./AuthFlow";
 
 const RULES: { label: string; test: (v: string) => boolean }[] = [
-  { label: "12 caracteres minimum", test: (v) => v.length >= 12 },
+  { label: "12 caractères minimum", test: (v) => v.length >= 12 },
   { label: "Une minuscule", test: (v) => /[a-z]/.test(v) },
   { label: "Une majuscule", test: (v) => /[A-Z]/.test(v) },
   { label: "Un chiffre", test: (v) => /\d/.test(v) },
-  { label: "Un caractere special", test: (v) => /[^\w\s]/.test(v) },
+  { label: "Un caractère special", test: (v) => /[^\w\s]/.test(v) },
 ];
 
 export function PasswordChange({ onDone }: { onDone: (user: User) => void }) {
@@ -60,7 +60,7 @@ export function PasswordChange({ onDone }: { onDone: (user: User) => void }) {
 
         <form onSubmit={submit} className="panel p-7">
           <h2 className="font-display text-lg font-semibold text-ink-100">
-            Definir votre mot de passe
+            Définir votre mot de passe
           </h2>
           <p className="mt-1 text-sm text-ink-300">
             Le mot de passe fourni par Devoteam est provisoire. Choisissez-en un nouveau pour

@@ -101,8 +101,8 @@ def main() -> int:
         print(f"    {email.ljust(width)}   {password}")
     print(
         "\n  A la prochaine connexion, chaque compte devra :\n"
-        "    1. enroler a nouveau une application d'authentification (TOTP),\n"
-        "    2. definir un nouveau mot de passe.\n"
+        "    1. enroler à nouveau une application d'authentification (TOTP),\n"
+        "    2. définir un nouveau mot de passe.\n"
         "  Les sessions ouvertes ont ete revoquees.\n"
     )
     return 0

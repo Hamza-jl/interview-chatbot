@@ -29,8 +29,8 @@ router = APIRouter(tags=["chat"])
 HISTORY_TURNS = 8
 
 VERIFY_PROMPT = (
-    "Verifiez ce que j'ai retenu dans le panneau de droite, corrigez si "
-    "necessaire, puis confirmez pour passer a la suite."
+    "Vérifiez ce que j'ai retenu dans le panneau de droite, corrigez si "
+    "nécessaire, puis confirmez pour passer à la suite."
 )
 
 
@@ -71,7 +71,7 @@ def send_message(
     if survey.status == "completed":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cet entretien est cloture. Vous pouvez telecharger le document produit.",
+            detail="Cet entretien est clôturé. Vous pouvez télécharger le document produit.",
         )
 
     dek = unwrap_dek(survey.wrapped_dek)

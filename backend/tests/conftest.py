@@ -202,3 +202,11 @@ needs_templates = pytest.mark.skipif(
     not TEMPLATES_PRESENT,
     reason="Word templates not present - see backend/templates/README.md",
 )
+
+
+def unaccented(text: str) -> str:
+    """Fold accents so assertions survive edits to the French copy."""
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in folded if not unicodedata.combining(c))

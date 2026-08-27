@@ -111,7 +111,7 @@ def split(text: str) -> Tuple[Optional[Category], str]:
 _REPLY = {
     "salutation": (
         "Bonjour, et merci de prendre le temps de cet atelier. "
-        "Je vous accompagne pas a pas ; nous pouvons commencer quand vous le souhaitez."
+        "Je vous accompagne pas à pas ; nous pouvons commencer quand vous le souhaitez."
     ),
     "remerciement": "Je vous en prie.",
     "acquiescement": "Tres bien.",
@@ -119,9 +119,9 @@ _REPLY = {
 }
 
 _FIRST_TURN = (
-    "Bonjour, et bienvenue dans cet atelier d'etat des lieux. "
+    "Bonjour, et bienvenue dans cet atelier d'État des lieux. "
     "Prenez le temps qu'il vous faut : je pose les questions une par une, et vous "
-    "pouvez a tout moment me demander la definition d'un terme ou un exemple."
+    "pouvez à tout moment me demander la définition d'un terme ou un exemple."
 )
 
 

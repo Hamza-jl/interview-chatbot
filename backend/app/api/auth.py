@@ -246,7 +246,7 @@ def enroll_totp(
     if user.totp_enabled:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La double authentification est deja active.",
+            detail="La double authentification est déjà active.",
         )
 
     secret = security.new_totp_secret()
@@ -331,7 +331,7 @@ def refresh(
         deps.clear_auth_cookies(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session revoquee pour raison de securite. Merci de vous reconnecter.",
+            detail="Session revoquee pour raison de sécurité. Merci de vous reconnecter.",
         )
 
     if deps._aware(record.expires_at) < utcnow() or deps._aware(auth_session.absolute_expiry) < utcnow():

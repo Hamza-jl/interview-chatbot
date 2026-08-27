@@ -43,7 +43,7 @@ export function TopNav({
         <Wordmark compact />
 
         <div className="hidden items-center gap-1 md:flex">
-          {["Etat des lieux", "Referentiel PCA", "Support"].map((item, i) => (
+          {["État des lieux"].map((item, i) => (
             <span
               key={item}
               className={`rounded-lg px-3 py-1.5 text-[13px] transition ${
@@ -57,7 +57,7 @@ export function TopNav({
 
         <div className="flex items-center gap-2.5">
           <span
-            title="Deconnexion automatique apres inactivite"
+            title="Déconnexion automatique après inactivité"
             className={`hidden rounded-lg border px-2.5 py-1 font-mono text-[11px] transition-colors sm:block ${
               warning
                 ? "border-poppy-500/50 bg-poppy-500/10 text-ink-100"
@@ -119,7 +119,7 @@ export function TopNav({
                       strokeLinejoin="round"
                     />
                   </svg>
-                  Se deconnecter
+                  Se déconnecter
                 </button>
               </motion.div>
             )}

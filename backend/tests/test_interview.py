@@ -7,7 +7,7 @@ import io
 import docx
 
 from app.pca.blueprint import ENTITE_PLAN, TEMPLATE_FILES, get_plan, sections
-from tests.conftest import API, answer, authenticate, confirm, needs_templates
+from tests.conftest import API, answer, authenticate, confirm, needs_templates, unaccented
 
 
 def _open_session(client, headers, code: str = "DSI") -> dict:
@@ -219,7 +219,7 @@ def test_an_unknown_term_is_not_invented(client):
     turn = _say(client, headers, state["id"], "Que signifie le terme zorglub dans ce contexte ?")
 
     assert turn["recorded"] is False
-    assert "referentiel" in turn["reply"]["body"].lower()
+    assert "referentiel" in unaccented(turn["reply"]["body"])
 
 
 def test_the_interview_never_loops_forever_on_one_question(client):

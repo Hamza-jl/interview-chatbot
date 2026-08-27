@@ -12,7 +12,7 @@ type Props = {
 function kindLabel(kind: string): string {
   if (kind === "grid") return "tableau";
   if (kind === "field") return "valeur courte";
-  return "reponse redigee";
+  return "réponse rédigée";
 }
 
 export function Composer({ question, busy, onSend }: Props) {
@@ -99,7 +99,7 @@ export function Composer({ question, busy, onSend }: Props) {
                 Utiliser cet exemple comme point de depart
               </button>
               <p className="mt-2 text-[11px] text-ink-400">
-                A adapter a votre entite : l'exemple sert de gabarit, il n'est jamais enregistre tel quel.
+                À adapter à votre entité : l'exemple sert de gabarit, il n'est jamais enregistré tel quel.
               </p>
             </div>
           </motion.div>
@@ -135,7 +135,7 @@ export function Composer({ question, busy, onSend }: Props) {
             onClick={() => setShowExample((v) => !v)}
             className={`chip ${showExample ? "border-poppy-500/70 text-poppy-500" : ""}`}
           >
-            Voir un exemple de reponse
+            Voir un exemple de réponse
           </button>
         )}
         {isGrid && (
@@ -164,8 +164,8 @@ export function Composer({ question, busy, onSend }: Props) {
           }}
           placeholder={
             isGrid
-              ? "Une ligne par element, colonnes separees par «  |  » — ou repondez librement."
-              : "Votre reponse… (Entree pour envoyer, Maj+Entree pour un retour a la ligne)"
+              ? "Une ligne par élément, colonnes séparées par «  |  » — ou repondez librement."
+              : "Votre réponse… (Entrée pour envoyer, Maj+Entrée pour un retour à la ligne)"
           }
           aria-label="Votre message"
           className="scroll-slim w-full resize-none bg-transparent px-4 py-3.5 pr-32 text-[15px] leading-relaxed text-ink-100 placeholder:text-ink-400 focus:outline-none"
@@ -197,7 +197,7 @@ export function Composer({ question, busy, onSend }: Props) {
       </div>
 
       <p className="mt-2.5 text-center text-[11px] text-ink-400">
-        Les informations saisies sont chiffrees avant enregistrement. Ne communiquez aucun mot de
+        Les informations saisies sont chiffrées avant enregistrement. Ne communiquez aucun mot de
         passe ni identifiant technique.
       </p>
     </div>

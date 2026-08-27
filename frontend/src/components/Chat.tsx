@@ -63,7 +63,7 @@ export function Chat({ detail, user, onExit, onError }: Props) {
         setExported(result);
       } catch (err) {
         onError(
-          err instanceof ApiError ? err.message : "La generation du document a echoue.",
+          err instanceof ApiError ? err.message : "La génération du document a echoue.",
         );
       } finally {
         setFinishing(false);
@@ -243,17 +243,17 @@ export function Chat({ detail, user, onExit, onError }: Props) {
                   <div className="truncate text-sm font-semibold text-ink-100">{question.label}</div>
                 </>
               ) : (
-                <div className="text-sm font-semibold text-accent-mint">Entretien termine</div>
+                <div className="text-sm font-semibold text-accent-mint">Entretien terminé</div>
               )}
             </div>
 
             <div className="hidden items-center gap-2 sm:flex">
               {state.degraded ? (
                 <span
-                  title="Le moteur d'analyse est momentanement indisponible : vos reponses sont enregistrees telles quelles."
+                  title="Le moteur d'analyse est momentanement indisponible : vos réponses sont enregistrées telles quelles."
                   className="rounded-lg border border-accent-fire/30 bg-accent-fire/10 px-2.5 py-1 text-[11px] font-medium text-accent-fire"
                 >
-                  Mode degrade
+                  Mode dégradé
                 </span>
               ) : (
                 state.engine && (
@@ -268,7 +268,7 @@ export function Chat({ detail, user, onExit, onError }: Props) {
               <span className="rounded-lg border border-ink-600 bg-ink-800/70 px-2.5 py-1 font-mono text-[11px] text-ink-300">
                 {question ? `${question.index + 1}/${question.total}` : `${state.total}/${state.total}`}
               </span>
-              <SecurityBadge label="Chiffre" />
+              <SecurityBadge label="Chiffré" />
             </div>
           </header>
 
@@ -288,15 +288,15 @@ export function Chat({ detail, user, onExit, onError }: Props) {
           {pending ? (
             <div className="border-t border-ink-600 bg-ink-900 px-6 py-4 text-center">
               <p className="text-sm text-ink-300">
-                Verifiez la reponse dans le panneau, puis confirmez pour continuer.
+                Vérifiez la réponse dans le panneau, puis confirmez pour continuer.
               </p>
             </div>
           ) : state.status === "completed" ? (
             <div className="border-t border-ink-600 bg-ink-900 px-6 py-5 text-center">
               <p className="text-sm text-ink-300">
                 {finishing
-                  ? "Generation du document en cours…"
-                  : "Cet entretien est cloture. Le document est disponible ci-dessous."}
+                  ? "Génération du document en cours…"
+                  : "Cet entretien est clôturé. Le document est disponible ci-dessous."}
               </p>
               {exported && (
                 <button
@@ -388,7 +388,7 @@ function Bubble({ message, user, index }: { message: Message; user: User; index:
         >
           <RichText text={message.body} />
         </div>
-        {message.intent && message.intent !== "systeme" && !mine && (
+        {message.intent && message.intent !== "système" && !mine && (
           <div className="mt-1.5 px-1 text-[11px] text-ink-400">
             {intentLabel(message.intent)}
           </div>
@@ -401,17 +401,17 @@ function Bubble({ message, user, index }: { message: Message; user: User; index:
 function intentLabel(intent: string): string {
   switch (intent) {
     case "question":
-      return "Reponse a votre question — rien n'a ete enregistre";
+      return "Réponse à votre question — rien n'a ete enregistré";
     case "mixte":
-      return "Question traitee et reponse enregistree";
+      return "Question traitée et réponse enregistrée";
     case "salutation":
-      return "Echange de courtoisie — rien n'a ete enregistre";
+      return "Échange de courtoisie — rien n'a ete enregistré";
     case "navigation":
       return "Navigation";
     case "hors_sujet":
-      return "Hors perimetre de l'atelier";
+      return "Hors périmètre de l'atelier";
     default:
-      return "Reponse enregistree";
+      return "Réponse enregistrée";
   }
 }
 

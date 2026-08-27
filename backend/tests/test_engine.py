@@ -12,6 +12,7 @@ from app.ai import staged
 from app.ai.llm import active_backend, active_label, sanitize
 from app.core.config import settings
 from app.pca.blueprint import TEMPLATE_FILES, get_plan
+from tests.conftest import unaccented
 
 
 # --------------------------------------------------------------------------- #
@@ -97,7 +98,7 @@ def test_definitions_are_served_verbatim_from_the_referential():
     assert question.prompt in known, "the interview question must be re-asked"
 
     unknown = staged.answer_definition("que signifie le terme zorglub ?", question)
-    assert "referentiel" in unknown.lower()
+    assert "referentiel" in unaccented(unknown)
     assert "Vitale" not in unknown
 
 

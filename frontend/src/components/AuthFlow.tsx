@@ -8,7 +8,7 @@ import {
   type TokenResponse,
   type TotpEnrollment,
 } from "../lib/api";
-import { AmbientGlow, SecurityBadge, Wordmark } from "./Brand";
+import { AmbientGlow, CoBrand, SecurityBadge } from "./Brand";
 
 type Stage = "credentials" | "totp" | "enroll";
 
@@ -82,13 +82,13 @@ export function AuthFlow({ onAuthenticated }: { onAuthenticated: (s: TokenRespon
       <AmbientGlow />
       <div className="w-full max-w-[26.5rem]">
         <motion.div {...fade} className="mb-8 flex flex-col items-center gap-5 text-center">
-          <Wordmark />
+          <CoBrand />
           <div>
             <h1 className="font-display text-[26px] font-bold leading-tight text-ink-100">
-              Etat des lieux <span className="text-poppy-500">PCA</span>
+              État des lieux <span className="text-poppy-500">PCA</span>
             </h1>
             <p className="mt-2 text-sm text-ink-300">
-              Espace securise · Collecte d'etat des lieux
+              Espace sécurisé · Collecte d'état des lieux
             </p>
           </div>
         </motion.div>
@@ -105,8 +105,8 @@ export function AuthFlow({ onAuthenticated }: { onAuthenticated: (s: TokenRespon
             {stage === "totp" && (
               <CodeForm
                 busy={busy}
-                title="Verification en deux etapes"
-                hint="Saisissez le code a 6 chiffres affiche par votre application d'authentification."
+                title="Vérification en deux étapes"
+                hint="Saisissez le code à 6 chiffres affiché par votre application d'authentification."
                 onSubmit={submitCode}
                 onBack={() => setStage("credentials")}
               />
@@ -134,9 +134,9 @@ export function AuthFlow({ onAuthenticated }: { onAuthenticated: (s: TokenRespon
         <div className="mt-6 flex flex-col items-center gap-3">
           <SecurityBadge />
           <p className="text-center text-xs leading-relaxed text-ink-400">
-            Vos reponses sont chiffrees et destinees exclusivement a l&apos;equipe PCA.
+            Vos réponses sont chiffrées et destinées exclusivement à l&apos;équipe Devoteam.
             <br />
-            Toute tentative d&apos;acces est journalisee.
+            Toute tentative d&apos;accès est journalisée.
           </p>
         </div>
       </div>
@@ -166,7 +166,7 @@ function CredentialsForm({
     >
       <h2 className="font-display text-lg font-semibold text-ink-100">Connexion</h2>
       <p className="mt-1 text-sm text-ink-300">
-        Utilisez les identifiants qui vous ont ete transmis par Devoteam.
+        Utilisez les identifiants qui vous ont été transmis par Devoteam.
       </p>
 
       <div className="mt-6">
@@ -178,7 +178,7 @@ function CredentialsForm({
           type="email"
           className="field"
           autoComplete="username"
-          placeholder="prenom.nom@exemple.com"
+          placeholder="prénom.nom@exemple.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
@@ -213,7 +213,7 @@ function CredentialsForm({
 
       <button type="submit" disabled={busy || !email || !password} className="btn-primary mt-7 w-full">
         {busy ? <Spinner /> : null}
-        {busy ? "Verification…" : "Se connecter"}
+        {busy ? "Vérification…" : "Se connecter"}
       </button>
     </form>
   );
@@ -293,7 +293,7 @@ function CodeForm({
 
       <button type="submit" disabled={busy || code.length < 6} className="btn-primary mt-7 w-full">
         {busy ? <Spinner /> : null}
-        {busy ? "Verification…" : "Valider"}
+        {busy ? "Vérification…" : "Valider"}
       </button>
 
       {onBack && (
@@ -328,7 +328,7 @@ function EnrollForm({
           Activer la double authentification
         </h2>
         <p className="mt-1 text-sm text-ink-300">
-          Obligatoire pour acceder aux donnees de continuite d&apos;activite.
+          Obligatoire pour acceder aux données de continuité d&apos;activité.
         </p>
 
         <div className="mt-6 flex justify-center">
@@ -338,7 +338,7 @@ function EnrollForm({
         </div>
 
         <div className="mt-5">
-          <span className="label">Ou saisissez cette cle manuellement</span>
+          <span className="label">Ou saisissez cette clé manuellement</span>
           <code className="block break-all rounded-xl border border-ink-600 bg-ink-900/80 px-4 py-3 font-mono text-[13px] tracking-wider text-ink-200">
             {enrollment.secret}
           </code>
@@ -346,7 +346,7 @@ function EnrollForm({
 
         <div className="mt-5 rounded-xl border border-accent-fire/25 bg-accent-fire/10 p-4">
           <span className="mb-2 block text-xs font-semibold uppercase tracking-[.12em] text-accent-fire">
-            Codes de secours — a conserver hors ligne
+            Codes de secours — à conserver hors ligne
           </span>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-[13px] text-ink-200">
             {enrollment.recovery_codes.map((code) => (
@@ -359,7 +359,7 @@ function EnrollForm({
         </div>
 
         <button onClick={() => setSaved(true)} className="btn-primary mt-6 w-full">
-          J&apos;ai enregistre ces informations
+          J&apos;ai enregistré ces informations
         </button>
       </div>
     );
@@ -369,7 +369,7 @@ function EnrollForm({
     <CodeForm
       busy={busy}
       title="Confirmer l'enrolement"
-      hint="Saisissez le code genere par votre application pour finaliser l'activation."
+      hint="Saisissez le code généré par votre application pour finaliser l'activation."
       onSubmit={onSubmit}
     />
   );

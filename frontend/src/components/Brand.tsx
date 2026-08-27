@@ -46,9 +46,63 @@ export function Wordmark({
         </div>
         {!compact && (
           <div className="mt-1 text-[10px] font-medium uppercase tracking-[.18em] text-ink-400">
-            PCA · Etat des lieux
+            {PROGRAMME_TAGLINE}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Deployment-specific line under the Devoteam wordmark. */
+export const PROGRAMME_TAGLINE = "PROJETS SDSI/SMCA";
+
+/**
+ * Client wordmark: a serif "MANSA BANK" beside the three-plane mark.
+ *
+ * Redrawn rather than embedded, so the lock-up scales with the page and follows
+ * the viewer's theme instead of shipping a fixed-resolution raster.
+ */
+export function ClientMark({ height = 26 }: { height?: number }) {
+  return (
+    <svg
+      height={height}
+      viewBox="0 0 260 46"
+      fill="none"
+      role="img"
+      aria-label="MANSA BANK"
+      className="shrink-0"
+    >
+      <text
+        x="0"
+        y="31"
+        className="fill-ink-100"
+        fontFamily="Cormorant Garamond, Georgia, 'Times New Roman', serif"
+        fontSize="30"
+        fontWeight="600"
+        letterSpacing="1.6"
+      >
+        MANSA BANK
+      </text>
+      {/* the three overlapping planes, drawn back to front */}
+      <path d="M225 6 L252 12 L236 30 Z" fill="#C8A57C" />
+      <path d="M219 14 L241 10 L233 34 Z" fill="#D2853F" opacity="0.92" />
+      <path d="M228 30 L250 26 L240 42 Z" fill="#BFD5F0" />
+    </svg>
+  );
+}
+
+/**
+ * The co-branded lock-up shown while signing in: the consultancy that runs the
+ * workshop, then the organisation being documented.
+ */
+export function CoBrand() {
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="flex items-center gap-5 sm:gap-7">
+        <Wordmark />
+        <span aria-hidden="true" className="h-10 w-px bg-ink-600" />
+        <ClientMark height={28} />
       </div>
     </div>
   );
@@ -86,7 +140,7 @@ export function WindowDots() {
   );
 }
 
-export function SecurityBadge({ label = "Chiffre de bout en bout" }: { label?: string }) {
+export function SecurityBadge({ label = "Chiffré de bout en bout" }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-lg border border-accent-mint/30 bg-accent-mint/10 px-2.5 py-1 text-[11px] font-medium text-accent-mint">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">

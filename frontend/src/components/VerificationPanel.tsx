@@ -77,7 +77,7 @@ export function VerificationPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">
-              {isEdit ? `Modifier · ${pending.section}` : "Verification"}
+              {isEdit ? `Modifier · ${pending.section}` : "Vérification"}
             </div>
             <h2 className="mt-1 font-display text-[15px] font-semibold text-ink-100">
               {pending.label}
@@ -90,7 +90,7 @@ export function VerificationPanel({
                 onClick={() => setExpanded((v) => !v)}
                 className="rounded-lg border border-ink-600 px-2 py-1 text-[11px] font-medium text-ink-300 transition hover:border-ink-500 hover:text-ink-100"
               >
-                {expanded ? "Reduire" : "Agrandir"}
+                {expanded ? "Réduire" : "Agrandir"}
               </button>
             )}
             <span
@@ -100,14 +100,14 @@ export function VerificationPanel({
                   : "border border-accent-fire/40 bg-accent-fire/10 text-ink-100"
               }`}
             >
-              {isEdit ? "Enregistre" : "A confirmer"}
+              {isEdit ? "Enregistré" : "À confirmer"}
             </span>
           </div>
         </div>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-300">
           {isEdit
-            ? "Vous relisez une reponse deja enregistree. Toute modification remplace ce qui sera ecrit dans le document."
-            : "Voici ce que j'ai retenu. Corrigez ce qui doit l'etre, puis confirmez : rien n'est ecrit dans le document tant que vous n'avez pas valide."}
+            ? "Vous relisez une réponse déjà enregistrée. Toute modification remplacé ce qui sera écrit dans le document."
+            : "Voici ce que j'ai retenu. Corrigez ce qui doit l'être, puis confirmez : rien n'est écrit dans le document tant que vous n'avez pas validé."}
         </p>
       </header>
 
@@ -201,8 +201,8 @@ export function VerificationPanel({
             </div>
 
             <p className="mt-3 text-[11px] leading-relaxed text-ink-400">
-              Les intitules de colonnes proviennent du modele officiel et ne sont pas
-              modifiables. Vous pouvez corriger, completer ou supprimer les lignes.
+              Les intitules de colonnes proviennent du modèle officiel et ne sont pas
+              modifiables. Vous pouvez corriger, compléter ou supprimer les lignes.
             </p>
           </>
         ) : (
@@ -239,7 +239,7 @@ export function VerificationPanel({
             ? "Enregistrement…"
             : isEdit
               ? "Enregistrer la correction"
-              : "Confirmer et continuer"}
+              : "Confirmer et continuer vers la question suivante"}
         </button>
         <button
           type="button"
@@ -247,11 +247,11 @@ export function VerificationPanel({
           onClick={onDiscard}
           className="mt-2 w-full rounded-xl px-4 py-2 text-[13px] text-ink-400 transition hover:text-ink-100"
         >
-          {isEdit ? "Fermer sans modifier" : "Reprendre ma reponse"}
+          {isEdit ? "Fermer sans modifier" : "Reprendre ma réponse"}
         </button>
         {!ready && (
           <p className="mt-2 text-center text-[11px] text-ink-400">
-            {isGrid ? "Renseignez au moins une ligne." : "La reponse ne peut pas etre vide."}
+            {isGrid ? "Renseignez au moins une ligne." : "La réponse ne peut pas être vide."}
           </p>
         )}
       </footer>
@@ -263,7 +263,7 @@ export function VerificationPanel({
       initial={{ opacity: 0, x: expanded ? 0 : 24, scale: expanded ? 0.98 : 1 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-      aria-label={isEdit ? "Modifier une reponse" : "Verification de la reponse"}
+      aria-label={isEdit ? "Modifier une réponse" : "Vérification de la réponse"}
       className={expanded ? `${shell} bg-ink-100/40 backdrop-blur-sm` : shell}
     >
       {body}

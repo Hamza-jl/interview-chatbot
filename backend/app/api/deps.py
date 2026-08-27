@@ -95,7 +95,7 @@ def require_password_set(principal: Principal = Depends(current_principal)) -> P
     if principal.user.must_change_password:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vous devez definir un nouveau mot de passe avant de continuer.",
+            detail="Vous devez définir un nouveau mot de passe avant de continuer.",
         )
     return principal
 
