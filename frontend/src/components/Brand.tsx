@@ -12,9 +12,6 @@ import clientLogo from "../assets/mansa-bank.png";
  * the page's tinted ground.
  */
 
-/** Deployment-specific line under the consultancy wordmark. */
-export const PROGRAMME_TAGLINE = "PROJETS SDSI/SMCA";
-
 export function Logo({ size = 34 }: { size?: number }) {
   return (
     <img
@@ -40,29 +37,6 @@ export function ClientMark({ height = 30 }: { height?: number }) {
 }
 
 /**
- * Consultancy mark with the programme line beneath it.
- * `compact` drops the line, for the top bar.
- */
-export function Wordmark({
-  compact = false,
-  size = 34,
-}: {
-  compact?: boolean;
-  size?: number;
-}) {
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <Logo size={size} />
-      {!compact && (
-        <div className="pl-[2px] text-[9.5px] font-semibold uppercase tracking-[.14em] text-ink-400">
-          {PROGRAMME_TAGLINE}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
  * The co-branded lock-up: the consultancy running the workshop, then the
  * organisation being documented.
  */
@@ -72,7 +46,7 @@ export function CoBrand({ compact = false }: { compact?: boolean }) {
   // down to balance optically rather than numerically.
   return (
     <div className="flex items-center gap-4 sm:gap-5">
-      <Wordmark compact={compact} size={compact ? 24 : 38} />
+      <Logo size={compact ? 24 : 38} />
       <span aria-hidden="true" className={`w-px shrink-0 bg-ink-600 ${compact ? "h-6" : "h-9"}`} />
       <ClientMark height={compact ? 16 : 24} />
     </div>

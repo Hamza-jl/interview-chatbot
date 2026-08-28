@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Wordmark } from "./Brand";
+import { Logo } from "./Brand";
 
 type Props = { children: ReactNode };
 type State = { failed: boolean };
@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="grid min-h-screen place-items-center px-5">
         <div className="panel w-full max-w-md p-8 text-center">
           <div className="mb-6 flex justify-center">
-            <Wordmark />
+            <Logo size={38} />
           </div>
           <h1 className="font-display text-xl font-bold text-ink-100">
             L&apos;affichage a rencontré un problème

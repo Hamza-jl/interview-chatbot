@@ -85,7 +85,7 @@ export function AuthFlow({ onAuthenticated }: { onAuthenticated: (s: TokenRespon
           <CoBrand />
           <div>
             <h1 className="font-display text-[26px] font-bold leading-tight text-ink-100">
-              État des lieux <span className="text-poppy-500">PCA</span>
+              PROJETS <span className="text-poppy-500">SDSI/SMCA</span>
             </h1>
             <p className="mt-2 text-sm text-ink-300">
               Espace sécurisé · Collecte d'état des lieux

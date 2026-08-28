@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ApiError, api, type User } from "../lib/api";
-import { AmbientGlow, Wordmark } from "./Brand";
+import { AmbientGlow, Logo } from "./Brand";
 import { Spinner } from "./AuthFlow";
 
 const RULES: { label: string; test: (v: string) => boolean }[] = [
@@ -55,7 +55,7 @@ export function PasswordChange({ onDone }: { onDone: (user: User) => void }) {
         className="w-full max-w-[27rem]"
       >
         <div className="mb-8 flex justify-center">
-          <Wordmark />
+          <Logo size={38} />
         </div>
 
         <form onSubmit={submit} className="panel p-7">
