@@ -64,7 +64,7 @@ SENS_FLUX = ["T", "R", "T/R"]
 COLS_ACTIVITES = [
     Column("domaine", "Domaine", "Grand domaine fonctionnel de l'entité"),
     Column("processus", "Processus", "Processus métier rattache au domaine"),
-    Column("macro_activite", "Macro activite", "Activite operationnelle concrete"),
+    Column("macro_activite", "Macro activité", "Activité opérationnelle concrète"),
 ]
 
 COLS_CONTRAINTES = [
@@ -72,12 +72,12 @@ COLS_CONTRAINTES = [
     Column("processus", "Processus"),
     Column(
         "contraintes",
-        "Contraintes operationnelles",
+        "Contraintes opérationnelles",
         "Exigences réglementaires, juridiques, contractuelles ou de confidentialite",
     ),
     Column(
         "periodes",
-        "Periodes critiques",
+        "Périodes critiques",
         "Périodes de forte activité ou a forts enjeux (clôture mensuelle / annuelle, debut de mois)",
     ),
 ]
@@ -87,14 +87,14 @@ COLS_APPLICATIONS = [
     Column("processus", "Processus"),
     Column("applications", "Inventaire des applications", "Nom des applications utilisées"),
     Column("couverture", "Couverture fonctionnelle", "Ce que l'application couvre reellement"),
-    Column("criticite", "Criticite SI", "Niveau de dépendance", choices=CRITICITE_SI),
+    Column("criticite", "Criticité SI", "Niveau de dépendance", choices=CRITICITE_SI),
 ]
 
 COLS_FLUX_INTERNES = [
     Column("correspondant", "Groupes fonctionnels / Correspondants"),
     Column("type_info", "Type d'information internes"),
     Column("criticite", "Niveau de criticité", "A, B, C ou D", choices=CRITICITE_FLUX),
-    Column("sens", "Transmis / Recu (T/R)", choices=SENS_FLUX),
+    Column("sens", "Transmis / Reçu (T/R)", choices=SENS_FLUX),
     Column("ressources", "Ressources SI utilisees"),
 ]
 
@@ -107,17 +107,17 @@ COLS_FLUX_EXTERNES = [
         "Mono-correspondant (preciser si monopole) ou Multi-correspondants",
         choices=["Mono", "Mono (monopole)", "Multi"],
     ),
-    Column("sens", "Transmis / Recu (T/R)", choices=SENS_FLUX),
+    Column("sens", "Transmis / Reçu (T/R)", choices=SENS_FLUX),
     Column("ressources", "Ressources SI utilisees"),
 ]
 
 COLS_COLLABORATEURS = [
     Column("fonction", "Fonction"),
     Column("nom", "Nom"),
-    Column("prenom", "Prenom"),
+    Column("prenom", "Prénom"),
     Column("poste", "Poste"),
     Column("anciennete", "Ancienneté dans le poste"),
-    Column("suppleants", "Suppleants possibles", required=False),
+    Column("suppleants", "Suppléants possibles", required=False),
 ]
 
 COLS_APPLI_ANNEXE = [
@@ -135,7 +135,7 @@ COLS_DOCUMENTS = [
         "Type de stockage",
         choices=["Electronique", "Papier", "Electronique et Papier"],
     ),
-    Column("duplication", "Duplication (O/N) - si oui, ou ?", "Répondre O ou N puis préciser le lieu"),
+    Column("duplication", "Duplication (O/N) - si oui, où ?", "Répondre O ou N puis préciser le lieu"),
 ]
 
 
@@ -207,8 +207,8 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
         Question(
             id=f"{prefix}.annexe.collaborateurs",
             kind="grid",
-            section="Annexe - Collaborateurs cles",
-            label="Collaborateurs cles",
+            section="Annexe - Collaborateurs clés",
+            label="Collaborateurs clés",
             prompt=(
                 "Qui sont vos collaborateurs clés ? Pour chacun : fonction, nom, prénom, poste, "
                 "ancienneté dans le poste et suppléants possibles."
@@ -218,7 +218,7 @@ def _annexes(prefix: str, t_int: int, t_ext: int, t_collab: int, t_appli: int, t
                 "tout collaborateur qui assure une tache tout seul ; tout collaborateur dont le potentiel "
                 "d'encadrement est affirme au sein de l'équipe."
             ),
-            example="Expert monetique | Trabelsi | Karim | Ingenieur systeme | 8 ans | Aucun suppleant identifie",
+            example="Expert monétique | Trabelsi | Karim | Ingénieur système | 8 ans | Aucun suppléant identifié",
             columns=COLS_COLLABORATEURS,
             target=Target(table=t_collab, mode="rows"),
         ),
@@ -269,15 +269,15 @@ DSI_PLAN: List[Question] = [
         id="dsi.organisation.organigramme",
         kind="open",
         section="2. Organisation, gouvernance & effectifs",
-        label="Organigramme & Repartition",
+        label="Organigramme & Répartition",
         prompt=(
             "Décrivez l'organisation de la DSI : effectif total, répartition par équipe "
             "et rôles détaillés."
         ),
         help="Une réponse rédigée, aussi precise que possible sur les effectifs par équipe.",
         example=(
-            "42 collaborateurs repartis en 4 poles : Etudes & Developpement (16), Production & "
-            "Infrastructure (12), Securite SI (5), Support & Proximite (9)."
+            "42 collaborateurs répartis en 4 pôles : Études & Développement (16), Production & "
+            "Infrastructure (12), Sécurité SI (5), Support & Proximité (9)."
         ),
         target=Target(table=2, row=1, col=1),
     ),
@@ -316,7 +316,7 @@ DSI_PLAN: List[Question] = [
             "et quelles sont les périodes critiques ?"
         ),
         help=(
-            "Contraintes operationnelles : exigences reglementaires, juridiques, contractuelles "
+            "Contraintes opérationnelles : exigences réglementaires, juridiques, contractuelles "
             "ou de confidentialite. Périodes critiques : périodes de forte activité ou a forts "
             "enjeux (clôture mensuelle / annuelle, debut de mois)."
         ),
@@ -357,7 +357,7 @@ DSI_PLAN: List[Question] = [
             "quelle couverture fonctionnelle et quelle criticité SI (V, C, MC, PC) ?"
         ),
         help=(
-            "Criticite SI - Vitale (V), Critique (C), Moyennement critique (MC), Peu critique (PC). "
+            "Criticité SI - Vitale (V), Critique (C), Moyennement critique (MC), Peu critique (PC). "
             "Elle traduit le niveau de dépendance du processus à l'application."
         ),
         example="Monétique | Gestion des cartes | SAB Monétique | Emission et opposition cartes | V",
@@ -382,7 +382,7 @@ DSI_PLAN: List[Question] = [
         id="dsi.donnees.data",
         kind="open",
         section="8. Gestion des données & patrimoine documentaire",
-        label="Donnees manipulees",
+        label="Données manipulées",
         prompt=(
             "Quelles sont les données clés produites ou consommees par la DSI ? "
             "Precisez la sensibilité, la volumétrie et la qualité."
@@ -438,7 +438,7 @@ DSI_PLAN: List[Question] = [
     Question(
         id="dsi.ecosysteme.correspondants",
         kind="open",
-        section="10. Ecosysteme, partenaires & collaborateurs cles",
+        section="10. Écosystème, partenaires & collaborateurs clés",
         label="Correspondants internes / externes",
         prompt=(
             "Quelles sont vos interactions clés, internes et externes ? Precisez le type de flux, "
@@ -451,7 +451,7 @@ DSI_PLAN: List[Question] = [
     Question(
         id="dsi.ecosysteme.fournisseurs",
         kind="open",
-        section="10. Ecosysteme, partenaires & collaborateurs cles",
+        section="10. Écosystème, partenaires & collaborateurs clés",
         label="Fournisseurs & Contrats",
         prompt=(
             "Quels sont vos editeurs et prestataires strategiques, et comment gerez-vous "
@@ -463,8 +463,8 @@ DSI_PLAN: List[Question] = [
     Question(
         id="dsi.ecosysteme.collaborateurs",
         kind="open",
-        section="10. Ecosysteme, partenaires & collaborateurs cles",
-        label="Collaborateurs cles & metiers d'expertise",
+        section="10. Écosystème, partenaires & collaborateurs clés",
+        label="Collaborateurs clés & métiers d'expertise",
         prompt="Quels profils presentent une expertise rare ou n'ont pas de binome identifié ?",
         help="Le détail nominatif sera repris dans l'annexe Collaborateurs clés.",
         example="Un seul expert AIX, un seul administrateur monétique.",
@@ -475,7 +475,7 @@ DSI_PLAN: List[Question] = [
         id="dsi.risques.it",
         kind="open",
         section="11. Risques IT et historique des incidents",
-        label="Risques IT & Securite",
+        label="Risques IT & Sécurité",
         prompt=(
             "Quels risques cyber avez-vous identifiés ? Qu'en est-il de l'obsolescence technique, "
             "des sauvegardes et du plan de secours informatique (PSI) ?"
@@ -524,7 +524,7 @@ ENTITE_PLAN: List[Question] = [
         id="ent.organisation.organigramme",
         kind="open",
         section="2. Organisation, gouvernance & effectifs",
-        label="Organigramme & Repartition",
+        label="Organigramme & Répartition",
         prompt=(
             "Décrivez l'organisation de votre entité : effectif total, répartition par "
             "pôle ou équipe, et rôles clés."
@@ -565,7 +565,7 @@ ENTITE_PLAN: List[Question] = [
             "et quelles sont les périodes critiques ?"
         ),
         help=(
-            "Contraintes operationnelles : exigences reglementaires, juridiques, contractuelles "
+            "Contraintes opérationnelles : exigences réglementaires, juridiques, contractuelles "
             "ou de confidentialite. Périodes critiques : périodes de forte activité ou a forts "
             "enjeux (clôture mensuelle / annuelle, debut de mois)."
         ),
@@ -583,7 +583,7 @@ ENTITE_PLAN: List[Question] = [
             "couverture fonctionnelle et criticité SI (V, C, MC, PC)."
         ),
         help=(
-            "Criticite SI - Vitale (V), Critique (C), Moyennement critique (MC), Peu critique (PC)."
+            "Criticité SI - Vitale (V), Critique (C), Moyennement critique (MC), Peu critique (PC)."
         ),
         example="Crédit | Octroi | Delta Crédit | Instruction et deblocage | V",
         columns=COLS_APPLICATIONS,
@@ -593,7 +593,7 @@ ENTITE_PLAN: List[Question] = [
         id="ent.donnees.data",
         kind="open",
         section="6. Gestion des données & patrimoine documentaire",
-        label="Donnees manipulees",
+        label="Données manipulées",
         prompt=(
             "Quelles données clés produisez-vous ou consommez-vous ? Precisez la sensibilité, "
             "la volumétrie et la qualité."
@@ -617,7 +617,7 @@ ENTITE_PLAN: List[Question] = [
     Question(
         id="ent.ecosysteme.correspondants",
         kind="open",
-        section="7. Ecosysteme, partenaires & collaborateurs cles",
+        section="7. Écosystème, partenaires & collaborateurs clés",
         label="Correspondants internes / externes",
         prompt=(
             "Quelles sont vos interactions clés, internes et externes ? Precisez le type de flux, "
@@ -630,8 +630,8 @@ ENTITE_PLAN: List[Question] = [
     Question(
         id="ent.ecosysteme.collaborateurs",
         kind="open",
-        section="7. Ecosysteme, partenaires & collaborateurs cles",
-        label="Collaborateurs cles & metiers d'expertise",
+        section="7. Écosystème, partenaires & collaborateurs clés",
+        label="Collaborateurs clés & métiers d'expertise",
         prompt="Quels profils presentent une expertise rare ou n'ont pas de binome identifié ?",
         help="Le détail nominatif sera repris dans l'annexe Collaborateurs clés.",
         example="Un seul juriste specialise en recouvrement contentieux.",

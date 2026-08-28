@@ -39,14 +39,15 @@ export function VerificationPanel({
   const [rows, setRows] = useState<Record<string, string>[]>(
     () => (pending.rows?.length ? pending.rows : [blankRow(pending)]),
   );
-  // Wide tables open expanded straight away - four or more columns are unusable
-  // in the docked width.
-  const [expanded, setExpanded] = useState(isGrid && pending.columns.length >= 4);
+  // Every table opens expanded. The docked column is ~30rem: even three
+  // columns clip their cells there, and a clipped cell is worse than no table
+  // at all. "Reduire" docks it again for anyone who prefers that.
+  const [expanded, setExpanded] = useState(isGrid);
 
   useEffect(() => {
     setValue(pending.value ?? "");
     setRows(pending.rows?.length ? pending.rows : [blankRow(pending)]);
-    setExpanded(pending.kind === "grid" && pending.columns.length >= 4);
+    setExpanded(pending.kind === "grid");
   }, [pending]);
 
   const filledRows = useMemo(
@@ -123,7 +124,7 @@ export function VerificationPanel({
                         key={column.id}
                         scope="col"
                         title={column.hint || column.label}
-                        style={{ minWidth: column.choices ? "6rem" : "11rem" }}
+                        style={{ minWidth: column.choices ? "7rem" : "12rem" }}
                         className="sticky top-0 z-10 whitespace-nowrap border-b border-ink-600 bg-ink-800 px-2.5 py-2 text-left font-semibold text-ink-100"
                       >
                         {column.label}
