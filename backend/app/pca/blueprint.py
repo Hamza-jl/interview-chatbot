@@ -150,7 +150,7 @@ def _fiche(prefix: str) -> List[Question]:
             section="Fiche de suivi",
             label="Nom du Responsable",
             prompt="Pour commencer, quel est le nom du responsable de l'entité ?",
-            help="Le responsable hiérarchique de la structure documentee.",
+            help="Le responsable hiérarchique de la structure documentée.",
             example="M. Fabrice HAUHOUOT",
             target=Target(table=1, row=2, col=1),
         ),

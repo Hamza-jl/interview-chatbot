@@ -134,7 +134,7 @@ GLOSSARY: List[Entry] = [
     Entry(
         term="Macro activite",
         definition=(
-            "Activité opérationnelle concrete réalisée dans le cadre d'un processus. Elle se "
+            "Activité opérationnelle concrète réalisée dans le cadre d'un processus. Elle se "
             "situe entre le processus (vue d'ensemble) et la tache elementaire (geste métier)."
         ),
         source=TEMPLATE_SOURCE,

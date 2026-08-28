@@ -106,7 +106,7 @@ export function VerificationPanel({
         </div>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-300">
           {isEdit
-            ? "Vous relisez une réponse déjà enregistrée. Toute modification remplacé ce qui sera écrit dans le document."
+            ? "Vous relisez une réponse déjà enregistrée. Toute modification remplace ce qui sera écrit dans le document."
             : "Voici ce que j'ai retenu. Corrigez ce qui doit l'être, puis confirmez : rien n'est écrit dans le document tant que vous n'avez pas validé."}
         </p>
       </header>

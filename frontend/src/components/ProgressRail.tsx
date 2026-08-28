@@ -29,7 +29,7 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-5 pb-4 pt-5">
         <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">
-          Entité documentee
+          Entité documentée
         </div>
         <div className="mt-2 break-words font-display text-[15px] font-semibold leading-snug text-ink-100">
           {state.structure.name}
@@ -57,7 +57,7 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
           />
         </div>
         <div className="mt-2 text-[11px] text-ink-400">
-          {state.answered} sur {state.total} points renseignes
+          {state.answered} sur {state.total} points renseignés
         </div>
       </div>
 
