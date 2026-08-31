@@ -16,6 +16,7 @@ import { Composer } from "./Composer";
 import { ProgressRail } from "./ProgressRail";
 import { RichText } from "./RichText";
 import { SecurityBadge, WindowDots } from "./Brand";
+import { ReviewGate } from "./ReviewGate";
 import { ThankYou } from "./ThankYou";
 import { VerificationPanel } from "./VerificationPanel";
 
@@ -36,6 +37,10 @@ export function Chat({ detail, user, onExit, onError }: Props) {
   const [answers, setAnswers] = useState<AnswerRow[]>([]);
   const [exported, setExported] = useState<ExportResult | null>(null);
   const [finishing, setFinishing] = useState(false);
+  // Having the document and being shown the completion screen are two
+  // different things: reopening a closed interview to relire an answer must
+  // not throw the "Merci" panel over the transcript.
+  const [recapOpen, setRecapOpen] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +81,8 @@ export function Chat({ detail, user, onExit, onError }: Props) {
     void loadAnswers(state.id);
   }, [loadAnswers, state.id, state.answered]);
 
-  // A session reopened after completion should still offer its document.
+  // A session reopened after completion should still offer its document -
+  // silently, so the transcript is what you land on.
   useEffect(() => {
     if (state.status === "completed" && !exported && !finishing) void finalise(state.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,7 +106,10 @@ export function Chat({ detail, user, onExit, onError }: Props) {
       setMessages((m) => [...m, res.reply]);
       setState(res.state);
       setPending(res.pending);
-      if (res.completed) await finalise(res.state.id);
+      if (res.completed) {
+        await finalise(res.state.id);
+        setRecapOpen(true);
+      }
     } catch (err) {
       setMessages((m) => m.filter((msg) => msg.id !== optimistic.id));
       onError(err instanceof ApiError ? err.message : "Envoi impossible.");
@@ -124,7 +133,10 @@ export function Chat({ detail, user, onExit, onError }: Props) {
       setMessages((m) => [...m, res.reply]);
       setState(res.state);
       setPending(null);
-      if (res.completed) await finalise(res.state.id);
+      if (res.completed) {
+        await finalise(res.state.id);
+        setRecapOpen(true);
+      }
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Enregistrement impossible.");
     } finally {
@@ -135,32 +147,21 @@ export function Chat({ detail, user, onExit, onError }: Props) {
   function openForEdit(questionId: string) {
     const row = answers.find((a) => a.question_id === questionId);
     if (!row) return;
+    // Columns, prompt and example come from the plan rather than from the
+    // stored payload: a point that was never answered has no rows to infer a
+    // column set from, and that is exactly the point most likely to be opened.
     setEditing({
       question_id: row.question_id,
       label: row.label,
       section: row.section,
       kind: row.kind as PendingAnswer["kind"],
-      prompt: "",
-      help: "",
-      example: "",
-      columns: columnsFor(questionId),
+      prompt: row.prompt,
+      help: row.help,
+      example: row.example,
+      columns: row.columns,
       value: row.value,
       rows: row.rows,
     });
-  }
-
-  /** Column definitions live on the current question; fall back to the answer's own rows. */
-  function columnsFor(questionId: string) {
-    if (state.question && state.question.id === questionId) return state.question.columns;
-    const row = answers.find((a) => a.question_id === questionId);
-    const keys = row?.rows?.length ? Object.keys(row.rows[0]) : [];
-    return keys.map((k) => ({
-      id: k,
-      label: k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()),
-      hint: "",
-      choices: null,
-      required: false,
-    }));
   }
 
   async function saveEdit(
@@ -179,8 +180,30 @@ export function Chat({ detail, user, onExit, onError }: Props) {
       setState(detail.state);
       await loadAnswers(state.id);
       setEditing(null);
+      // Filling a hole in an interview that is already closed has to rebuild
+      // the document, or the correction lives only in the database while the
+      // deliverable on offer still has the hole.
+      if (detail.state.status === "completed") await finalise(state.id);
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Correction impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finish(acknowledge: boolean) {
+    setBusy(true);
+    try {
+      const res = await api<ChatResponse>(`/sessions/${state.id}/finish`, {
+        method: "POST",
+        body: { acknowledge },
+      });
+      setMessages((m) => [...m, res.reply]);
+      setState(res.state);
+      await finalise(res.state.id);
+      setRecapOpen(true);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Clôture impossible.");
     } finally {
       setBusy(false);
     }
@@ -242,6 +265,17 @@ export function Chat({ detail, user, onExit, onError }: Props) {
                   </div>
                   <div className="truncate text-sm font-semibold text-ink-100">{question.label}</div>
                 </>
+              ) : state.awaiting_review ? (
+                <>
+                  <div className="truncate text-[11px] font-medium uppercase tracking-[.12em] text-ink-400">
+                    Revue finale
+                  </div>
+                  <div className="truncate text-sm font-semibold text-ink-100">
+                    {state.missing.length === 0
+                      ? "Prêt à clôturer"
+                      : `${state.missing.length} point${state.missing.length > 1 ? "s" : ""} à compléter`}
+                  </div>
+                </>
               ) : (
                 <div className="text-sm font-semibold text-accent-mint">Entretien terminé</div>
               )}
@@ -299,14 +333,18 @@ export function Chat({ detail, user, onExit, onError }: Props) {
                   : "Cet entretien est clôturé. Le document est disponible ci-dessous."}
               </p>
               {exported && (
-                <button
-                  onClick={() => setExported({ ...exported })}
-                  className="btn-primary mt-3"
-                >
-                  Revoir le recapitulatif
+                <button onClick={() => setRecapOpen(true)} className="btn-primary mt-3">
+                  Revoir le récapitulatif
                 </button>
               )}
             </div>
+          ) : state.awaiting_review ? (
+            <ReviewGate
+              state={state}
+              busy={busy}
+              onOpen={openForEdit}
+              onFinish={finish}
+            />
           ) : (
             <Composer question={question} busy={busy} onSend={send} />
           )}
@@ -333,13 +371,13 @@ export function Chat({ detail, user, onExit, onError }: Props) {
       </div>
 
       <AnimatePresence>
-        {exported && state.status === "completed" && (
+        {recapOpen && exported && state.status === "completed" && (
           <ThankYou
             key="thank-you"
             result={exported}
             state={state}
             user={user}
-            onClose={() => setExported(null)}
+            onClose={() => setRecapOpen(false)}
             onExit={onExit}
           />
         )}
@@ -401,11 +439,11 @@ function Bubble({ message, user, index }: { message: Message; user: User; index:
 function intentLabel(intent: string): string {
   switch (intent) {
     case "question":
-      return "Réponse à votre question — rien n'a ete enregistré";
+      return "Réponse à votre question — rien n'a été enregistré";
     case "mixte":
       return "Question traitée et réponse enregistrée";
     case "salutation":
-      return "Échange de courtoisie — rien n'a ete enregistré";
+      return "Échange de courtoisie — rien n'a été enregistré";
     case "navigation":
       return "Navigation";
     case "hors_sujet":

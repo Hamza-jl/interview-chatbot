@@ -220,9 +220,22 @@ export interface SessionState {
   percent: number;
   question: Question | null;
   sections: ProgressSection[];
+  /** Points still blank, in the order they are asked. */
+  missing: MissingPoint[];
+  /** Every question has been passed but the interview is not closed yet. */
+  awaiting_review: boolean;
+  /** ISO date the interview was closed, or null while it is still open. */
+  completed_at: string | null;
   degraded: boolean;
   /** Model that produced the last turn, e.g. "qwen2.5:3b (local)". */
   engine: string;
+}
+
+export interface MissingPoint {
+  question_id: string;
+  label: string;
+  section: string;
+  index: number;
 }
 
 export interface Message {
@@ -270,6 +283,12 @@ export interface AnswerRow {
   confirmed: boolean;
   value: string | null;
   rows: Record<string, string>[] | null;
+  /** The question's own metadata, so any point can be opened for editing -
+   *  including one never answered, which has no rows to infer columns from. */
+  prompt: string;
+  help: string;
+  example: string;
+  columns: Column[];
 }
 
 export interface ExportResult {

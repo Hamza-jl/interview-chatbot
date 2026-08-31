@@ -27,6 +27,7 @@ from app.ai import engine, llm
 from app.db.models import Answer, ChatMessage, Export, Structure, SurveySession, utcnow
 from app.db.session import get_db
 from app.pca.blueprint import TEMPLATE_FILES, Question, get_plan, sections
+from app.pca import transcript
 from app.pca.docx_filler import fill_document
 from app.schemas.api import (
     AnswerOut,
@@ -35,7 +36,9 @@ from app.schemas.api import (
     ConfirmRequest,
     ContactCard,
     ExportOut,
+    FinishRequest,
     MessageOut,
+    MissingPoint,
     PendingAnswer,
     ProgressSection,
     QuestionOut,
@@ -66,6 +69,19 @@ def _structure_out(structure: Structure) -> StructureOut:
     )
 
 
+def _columns_out(question: Question) -> List[Dict[str, Any]]:
+    return [
+        {
+            "id": c.id,
+            "label": c.label,
+            "hint": c.hint,
+            "choices": c.choices,
+            "required": c.required,
+        }
+        for c in question.columns
+    ]
+
+
 def _question_out(question: Question, index: int, total: int) -> QuestionOut:
     return QuestionOut(
         id=question.id,
@@ -75,16 +91,7 @@ def _question_out(question: Question, index: int, total: int) -> QuestionOut:
         prompt=question.prompt,
         help=question.help,
         example=question.example,
-        columns=[
-            {
-                "id": c.id,
-                "label": c.label,
-                "hint": c.hint,
-                "choices": c.choices,
-                "required": c.required,
-            }
-            for c in question.columns
-        ],
+        columns=_columns_out(question),
         index=index,
         total=total,
     )
@@ -95,15 +102,35 @@ def _answer_map(db: Session, survey: SurveySession) -> Dict[str, Answer]:
     return {a.question_id: a for a in rows}
 
 
+def filled_ids(db: Session, survey: SurveySession) -> set[str]:
+    """Questions that actually carry an answer.
+
+    A draft awaiting confirmation is not progress: the interviewee has not yet
+    seen it laid out, so it may still be wrong.
+    """
+    return {
+        qid
+        for qid, a in _answer_map(db, survey).items()
+        if a.confirmed and a.completeness != "vide"
+    }
+
+
+def missing_points(db: Session, survey: SurveySession) -> List[MissingPoint]:
+    """Every point of the plan still blank, in the order they are asked."""
+    filled = filled_ids(db, survey)
+    return [
+        MissingPoint(question_id=q.id, label=q.label, section=q.section, index=index)
+        for index, q in enumerate(get_plan(survey.template_kind))
+        if q.id not in filled
+    ]
+
+
 def build_state(
     db: Session, survey: SurveySession, degraded: bool = False, engine_label: str = ""
 ) -> SessionState:
     plan = get_plan(survey.template_kind)
     total = len(plan)
-    answers = _answer_map(db, survey)
-    # A draft awaiting confirmation is not progress: the interviewee has not
-    # yet seen it laid out, so it may still be wrong.
-    filled = {qid for qid, a in answers.items() if a.confirmed and a.completeness != "vide"}
+    filled = filled_ids(db, survey)
 
     cursor = max(0, min(survey.cursor, total))
     question = _question_out(plan[cursor], cursor, total) if cursor < total else None
@@ -121,6 +148,12 @@ def build_state(
             )
         )
 
+    missing = [
+        MissingPoint(question_id=q.id, label=q.label, section=q.section, index=index)
+        for index, q in enumerate(plan)
+        if q.id not in filled
+    ]
+
     return SessionState(
         id=survey.id,
         structure=_structure_out(survey.structure),
@@ -132,9 +165,52 @@ def build_state(
         percent=int(round(100 * len(filled) / total)) if total else 0,
         question=question,
         sections=progress,
+        missing=missing,
+        # The interview has run out of questions but is not closed: it is
+        # waiting for the interviewee to look at what is still blank.
+        awaiting_review=survey.status != "completed" and cursor >= total,
+        completed_at=(
+            deps._aware(survey.completed_at).isoformat() if survey.completed_at else None
+        ),
         degraded=degraded,
         engine=engine_label or llm.active_label(),
     )
+
+
+# How many blank points to name in the recap before summarising the rest.
+REVIEW_MAX_LISTED = 8
+
+
+def end_of_plan(db: Session, survey: SurveySession) -> tuple[str, bool]:
+    """Called when the last question has been passed. Returns (reply, closed).
+
+    Closing here whenever the cursor runs out would hand the interviewee a
+    deliverable with silent holes in it - and the completion screen would be
+    the first they ever hear of it. So the interview stops one step short and
+    shows what is still blank; only an explicit clôture ends it.
+    """
+    missing = missing_points(db, survey)
+    if not missing:
+        survey.status = "completed"
+        survey.completed_at = utcnow()
+        return engine.closing(survey.structure.name), True
+
+    shown = missing[:REVIEW_MAX_LISTED]
+    lines = "\n".join(f"- **{m.label}** — {m.section}" for m in shown)
+    rest = len(missing) - len(shown)
+    if rest:
+        lines += f"\n- … et {rest} autre point{'s' if rest > 1 else ''}."
+
+    count = len(missing)
+    plural = "s" if count > 1 else ""
+    return (
+        "Nous avons parcouru l'ensemble du questionnaire. Avant de clôturer, "
+        f"il reste **{count} point{plural} sans réponse** :\n\n{lines}\n\n"
+        "Choisissez un point ci-dessous pour le compléter maintenant — j'ouvrirai "
+        "le tableau correspondant. Vous pouvez aussi clôturer l'entretien en "
+        "l'état : ces rubriques resteront vides dans le document, à compléter "
+        "ensuite avec votre consultant."
+    ), False
 
 
 def _message_out(dek: bytes, session_id: str, row: ChatMessage) -> MessageOut:
@@ -263,14 +339,30 @@ def create_session(
                 detail="Vous n'etes pas habilite a documenter cette structure.",
             )
 
-    # Resume rather than duplicate an interview already in progress.
-    existing = db.execute(
-        select(SurveySession).where(
-            SurveySession.user_id == principal.id,
-            SurveySession.structure_id == structure.id,
-            SurveySession.status == "in_progress",
+    # One interview per entity, ever. Resume one left open; refuse to restart
+    # one already closed - its document is the deliverable, and a second run
+    # would quietly produce a competing état des lieux for the same entity.
+    # A closed session wins over an open one whatever the dates say: that is
+    # what makes this self-healing where a restart already slipped through.
+    history = list(
+        db.execute(
+            select(SurveySession)
+            .where(
+                SurveySession.user_id == principal.id,
+                SurveySession.structure_id == structure.id,
+            )
+            .order_by(SurveySession.started_at.desc())
+        ).scalars()
+    )
+    if any(s.status == "completed" for s in history):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "L'état des lieux de cette structure est déjà clôturé. "
+                "Vous pouvez le consulter ou retélécharger le document."
+            ),
         )
-    ).scalar_one_or_none()
+    existing = next((s for s in history if s.status == "in_progress"), None)
     if existing is not None:
         return get_session(existing.id, db, principal)
 
@@ -295,6 +387,7 @@ def create_session(
         ip=ratelimit.client_ip(request), meta={"structure": structure.code, "questions": len(plan)},
     )
     db.commit()
+    transcript.save(db, survey, dek)
     db.refresh(survey)
     return get_session(survey.id, db, principal)
 
@@ -344,6 +437,10 @@ def list_answers(
                 confirmed=bool(row.confirmed) if row else False,
                 value=payload.get("value"),
                 rows=payload.get("rows"),
+                prompt=question.prompt,
+                help=question.help,
+                example=question.example,
+                columns=_columns_out(question),
             )
         )
     return out
@@ -389,11 +486,14 @@ def override_answer(
         ip=ratelimit.client_ip(request), meta={"question_id": question.id},
     )
     db.commit()
+    transcript.save(db, survey, dek)
 
     return AnswerOut(
         question_id=question.id, label=question.label, section=question.section,
-        kind=question.kind, completeness=completeness,
+        kind=question.kind, completeness=completeness, confirmed=True,
         value=body.get("value"), rows=body.get("rows"),
+        prompt=question.prompt, help=question.help, example=question.example,
+        columns=_columns_out(question),
     )
 
 
@@ -416,6 +516,14 @@ def export_session(
 ) -> ExportOut:
     ratelimit.enforce(request, "export", settings.RL_EXPORT, subject=principal.id)
     survey = deps.load_active_session(db, principal.id, session_id)
+    # The document is only ever produced from a deliberately closed interview.
+    # Generating it as a side effect of an export call would slip past the
+    # review of what is still blank.
+    if survey.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="L'entretien n'est pas clôturé : terminez-le avant de produire le document.",
+        )
     dek = unwrap_dek(survey.wrapped_dek)
 
     # Only confirmed answers reach the client's document. A draft the
@@ -438,7 +546,7 @@ def export_session(
         answers,
         structure_name=survey.structure.name,
         structure_code=survey.structure.code,
-        redacteur=f"{principal.user.full_name} - via plateforme Devoteam",
+        redacteur=f"{principal.user.full_name} - via plateforme {settings.CONSULTING_ORG}",
         interview_date=deps._aware(survey.started_at).date(),
     )
 
@@ -462,10 +570,6 @@ def export_session(
     record.blob_path = os.path.join(settings.EXPORT_DIR, f"{record.id}.bin")
     with open(record.blob_path, "wb") as handle:
         handle.write(encrypt_bytes(dek, survey.id, f"export:{record.id}", document))
-
-    if survey.status != "completed":
-        survey.status = "completed"
-        survey.completed_at = utcnow()
 
     audit.record(
         db, action="survey.export", actor_id=principal.id, target=survey.id,
@@ -553,11 +657,7 @@ def pending_answer(question: Question, payload: Dict[str, Any]) -> PendingAnswer
         prompt=question.prompt,
         help=question.help,
         example=question.example,
-        columns=[
-            {"id": c.id, "label": c.label, "hint": c.hint,
-             "choices": c.choices, "required": c.required}
-            for c in question.columns
-        ],
+        columns=_columns_out(question),
         value=payload.get("value"),
         rows=payload.get("rows"),
     )
@@ -622,11 +722,10 @@ def confirm_answer(
     survey.followups = 0
     survey.last_activity_at = utcnow()
 
-    completed = cursor >= total
-    if completed:
-        survey.status = "completed"
-        survey.completed_at = utcnow()
-        reply_text = f"C'est validé, merci.\n\n{engine.closing(survey.structure.name)}"
+    completed = False
+    if cursor >= total:
+        tail, completed = end_of_plan(db, survey)
+        reply_text = f"C'est validé, merci.\n\n{tail}"
     else:
         reply_text = f"C'est validé, merci.\n\n{plan[cursor].prompt}"
 
@@ -641,6 +740,7 @@ def confirm_answer(
               "rows": None, "edited": True},
     )
     db.commit()
+    transcript.save(db, survey, dek)
     db.refresh(reply_row)
 
     return ChatResponse(
@@ -649,6 +749,80 @@ def confirm_answer(
         intent="confirmation",
         recorded=True,
         completed=completed,
+    )
+
+
+@router.post("/sessions/{session_id}/finish", response_model=ChatResponse)
+def finish_interview(
+    session_id: str,
+    payload: FinishRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: deps.Principal = Depends(deps.require_csrf),
+) -> ChatResponse:
+    """Close the interview deliberately.
+
+    Blank points do not block the clôture - some genuinely have no answer -
+    but they have to be acknowledged, so nobody discovers them for the first
+    time on the completion screen.
+    """
+    survey = deps.load_active_session(db, principal.id, session_id)
+    if survey.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Cet entretien est déjà clôturé."
+        )
+
+    missing = missing_points(db, survey)
+    if missing and not payload.acknowledge:
+        count = len(missing)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{count} point{'s' if count > 1 else ''} restent sans réponse. "
+                "Complétez-les ou confirmez la clôture en l'état."
+            ) if count > 1 else (
+                "1 point reste sans réponse. "
+                "Complétez-le ou confirmez la clôture en l'état."
+            ),
+        )
+
+    dek = unwrap_dek(survey.wrapped_dek)
+    survey.cursor = len(get_plan(survey.template_kind))
+    survey.followups = 0
+    survey.status = "completed"
+    survey.completed_at = utcnow()
+    survey.last_activity_at = utcnow()
+
+    reply_text = engine.closing(survey.structure.name)
+    if missing:
+        count = len(missing)
+        names = ", ".join(m.label for m in missing[:REVIEW_MAX_LISTED])
+        reply_text = (
+            f"Entretien clôturé avec {count} point{'s' if count > 1 else ''} "
+            f"laissé{'s' if count > 1 else ''} vide{'s' if count > 1 else ''} "
+            f"({names}). Ces rubriques apparaîtront vides dans le document."
+            + "\n\n"
+            + reply_text
+        )
+
+    reply_row = append_message(
+        db, survey, dek, "assistant", reply_text, intent="cloture", question_id=None,
+    )
+    audit.record(
+        db, action="survey.finished", actor_id=principal.id, target=survey.id,
+        ip=ratelimit.client_ip(request),
+        meta={"missing": len(missing), "acknowledged": bool(payload.acknowledge)},
+    )
+    db.commit()
+    transcript.save(db, survey, dek)
+    db.refresh(reply_row)
+
+    return ChatResponse(
+        reply=_message_out(dek, survey.id, reply_row),
+        state=build_state(db, survey),
+        intent="cloture",
+        recorded=False,
+        completed=True,
     )
 
 
@@ -690,6 +864,7 @@ def discard_draft(
         ip=ratelimit.client_ip(request), meta={"question_id": question.id},
     )
     db.commit()
+    transcript.save(db, survey, dek)
     db.refresh(reply_row)
 
     return ChatResponse(

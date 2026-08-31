@@ -29,6 +29,7 @@ export default function App() {
   const [idleLeft, setIdleLeft] = useState(IDLE_LIMIT_SECONDS);
 
   const refreshTimer = useRef<number | null>(null);
+  const idleDeadline = useRef(0);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -85,28 +86,43 @@ export default function App() {
   }, [adopt, clearSession, notify]);
 
   /* -- idle countdown ------------------------------------------------------ */
+  // Keyed on the user's id, not the user object: the silent refresh loop hands
+  // back a fresh object every few minutes, and re-running this effect on that
+  // would re-arm the timer forever - an idle session would never time out.
+  const userId = user?.id ?? null;
+
   useEffect(() => {
-    if (!user) return;
-    const reset = () => setIdleLeft(IDLE_LIMIT_SECONDS);
+    if (!userId) return;
+
+    // A wall-clock deadline rather than a decrementing counter. Counting ticks
+    // gets both ends wrong: a leftover count from a previous session logs the
+    // next one straight back out, and a backgrounded tab has its timers
+    // throttled, so the count would over-report and outlive the server's own
+    // idle window.
+    const arm = () => {
+      idleDeadline.current = Date.now() + IDLE_LIMIT_SECONDS * 1000;
+    };
+    arm();
+    setIdleLeft(IDLE_LIMIT_SECONDS);
+
     const events = ["mousedown", "keydown", "touchstart", "scroll"] as const;
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    events.forEach((e) => window.addEventListener(e, arm, { passive: true }));
 
     const tick = window.setInterval(() => {
-      setIdleLeft((left) => {
-        if (left <= 1) {
-          void logout("idle");
-          return 0;
-        }
-        return left - 1;
-      });
+      const left = Math.max(0, Math.round((idleDeadline.current - Date.now()) / 1000));
+      setIdleLeft(left);
+      if (left === 0) {
+        window.clearInterval(tick);
+        void logout("idle");
+      }
     }, 1000);
 
     return () => {
-      events.forEach((e) => window.removeEventListener(e, reset));
+      events.forEach((e) => window.removeEventListener(e, arm));
       window.clearInterval(tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [userId]);
 
   async function logout(reason: "user" | "idle" = "user") {
     try {

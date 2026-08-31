@@ -114,7 +114,7 @@ _REPLY = {
         "Je vous accompagne pas à pas ; nous pouvons commencer quand vous le souhaitez."
     ),
     "remerciement": "Je vous en prie.",
-    "acquiescement": "Tres bien.",
+    "acquiescement": "Très bien.",
     "politesse": "Tout va bien, merci. Poursuivons quand vous voulez.",
 }
 

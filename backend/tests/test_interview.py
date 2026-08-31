@@ -7,7 +7,15 @@ import io
 import docx
 
 from app.pca.blueprint import ENTITE_PLAN, TEMPLATE_FILES, get_plan, sections
-from tests.conftest import API, answer, authenticate, confirm, needs_templates, unaccented
+from tests.conftest import (
+    API,
+    answer,
+    authenticate,
+    confirm,
+    finish,
+    needs_templates,
+    unaccented,
+)
 
 
 def _open_session(client, headers, code: str = "DSI") -> dict:
@@ -198,6 +206,7 @@ def test_an_unconfirmed_draft_never_reaches_the_document(client):
     answer(client, headers, state["id"], "Mme Sonia Ben Ammar")   # confirmed
     _say(client, headers, state["id"], "M. Karim Trabelsi")        # left as a draft
 
+    finish(client, headers, state["id"])                           # closed with gaps
     export = client.post(f"{API}/sessions/{state['id']}/export", headers=headers)
     assert export.status_code == 200
     document = client.get(
@@ -241,6 +250,167 @@ def test_the_interview_never_loops_forever_on_one_question(client):
         turn = answer(client, headers, session_id, "je ne sais pas trop quoi mettre ici")
 
     assert turn["state"]["cursor"] > cursor_before, "must not stall on the same question"
+
+
+# --------------------------------------------------------------------------- #
+# The review gate - nothing closes with silent holes in it
+# --------------------------------------------------------------------------- #
+def _fill(client, headers, session_id: str, answer_row: dict) -> None:
+    """Answer one point straight from the review panel, whatever its kind."""
+    body = {"question_id": answer_row["question_id"]}
+    if answer_row["kind"] == "grid":
+        body["rows"] = [{c["id"]: "a renseigner" for c in answer_row["columns"]}]
+    else:
+        body["value"] = "Valeur fournie pendant la revue finale."
+    res = client.put(f"{API}/sessions/{session_id}/answers", headers=headers, json=body)
+    assert res.status_code == 200, res.text
+
+
+def test_leaving_questions_blank_holds_the_interview_open_for_review(client):
+    """Running out of questions is not the same thing as having answered them."""
+    headers = authenticate(client, "client@example.com")
+    session_id = _open_session(client, headers)["state"]["id"]
+
+    answer(client, headers, session_id, "Mme Sonia Ben Ammar")
+    turn = _say(client, headers, session_id, "je veux terminer maintenant")
+
+    assert turn["completed"] is False, "the interview must not close over blank points"
+    state = turn["state"]
+    assert state["status"] == "in_progress"
+    assert state["awaiting_review"] is True
+    assert len(state["missing"]) == state["total"] - state["answered"] > 0
+    # The recap has to name them, not merely count them.
+    assert state["missing"][0]["label"] in turn["reply"]["body"]
+
+
+def test_a_blank_point_carries_its_columns_so_it_can_be_answered(client):
+    """The point most likely to be opened is the one with nothing stored yet."""
+    headers = authenticate(client, "client@example.com")
+    session_id = _open_session(client, headers)["state"]["id"]
+
+    rows = client.get(f"{API}/sessions/{session_id}/answers", headers=headers).json()
+    for row in rows:
+        if row["kind"] == "grid":
+            assert row["rows"] in (None, []), "nothing answered yet"
+            assert row["columns"], f"{row['question_id']}: no columns to render"
+            assert row["prompt"], f"{row['question_id']}: no prompt to show"
+            break
+    else:
+        raise AssertionError("the plan has no grid question")
+
+
+def test_the_document_cannot_be_produced_before_the_interview_is_closed(client):
+    headers = authenticate(client, "client@example.com")
+    session_id = _open_session(client, headers)["state"]["id"]
+    answer(client, headers, session_id, "Mme Sonia Ben Ammar")
+
+    refused = client.post(f"{API}/sessions/{session_id}/export", headers=headers)
+    assert refused.status_code == 409
+
+    finish(client, headers, session_id)
+    assert client.post(f"{API}/sessions/{session_id}/export", headers=headers).status_code == 200
+
+
+def test_closing_over_blank_points_takes_an_explicit_acknowledgement(client):
+    headers = authenticate(client, "client@example.com")
+    session_id = _open_session(client, headers)["state"]["id"]
+    answer(client, headers, session_id, "Mme Sonia Ben Ammar")
+
+    refused = finish(client, headers, session_id, acknowledge=False, expect=409)
+    assert "sans reponse" in unaccented(refused["detail"])
+
+    closed = finish(client, headers, session_id, acknowledge=True)
+    assert closed["completed"] is True
+    assert closed["state"]["status"] == "completed"
+    assert closed["state"]["awaiting_review"] is False
+
+
+def test_answering_from_the_review_clears_the_gate(client):
+    """Filling the last hole lets the interview close without an override."""
+    headers = authenticate(client, "client@example.com")
+    session_id = _open_session(client, headers)["state"]["id"]
+    _say(client, headers, session_id, "je veux terminer maintenant")
+
+    rows = client.get(f"{API}/sessions/{session_id}/answers", headers=headers).json()
+    for row in rows:
+        _fill(client, headers, session_id, row)
+
+    state = client.get(f"{API}/sessions/{session_id}", headers=headers).json()["state"]
+    assert state["missing"] == []
+    assert state["awaiting_review"] is True, "still open until it is deliberately closed"
+
+    closed = finish(client, headers, session_id, acknowledge=False)
+    assert closed["completed"] is True
+
+
+def test_the_composer_is_closed_while_the_review_is_pending(client):
+    """A message sent past the last question must not be filed against it."""
+    headers = authenticate(client, "client@example.com")
+    session_id = _open_session(client, headers)["state"]["id"]
+    _say(client, headers, session_id, "je veux terminer maintenant")
+
+    res = client.post(
+        f"{API}/sessions/{session_id}/messages", headers=headers,
+        json={"message": "encore une remarque"},
+    )
+    assert res.status_code == 409
+
+
+# --------------------------------------------------------------------------- #
+# One interview per entity
+# --------------------------------------------------------------------------- #
+def _start(client, headers, code: str = "DSI"):
+    structures = client.get(f"{API}/structures", headers=headers).json()
+    target = next(s for s in structures if s["code"] == code)
+    return client.post(f"{API}/sessions", headers=headers, json={"structure_id": target["id"]})
+
+
+def test_an_interview_left_open_is_resumed_not_duplicated(client):
+    headers = authenticate(client, "client@example.com")
+    first = _start(client, headers).json()["state"]
+    answer(client, headers, first["id"], "Mme Sonia Ben Ammar")
+
+    again = _start(client, headers).json()["state"]
+
+    assert again["id"] == first["id"], "picking the structure again must resume"
+    assert again["answered"] == 1, "and pick up where it was left off"
+    assert again["cursor"] > 0
+
+
+def test_a_closed_interview_cannot_be_restarted(client):
+    """The document is the deliverable - a second run would compete with it."""
+    headers = authenticate(client, "client@example.com")
+    session_id = _start(client, headers).json()["state"]["id"]
+    answer(client, headers, session_id, "Mme Sonia Ben Ammar")
+    finish(client, headers, session_id)
+
+    refused = _start(client, headers)
+    assert refused.status_code == 409
+    assert "cloture" in unaccented(refused.json()["detail"]).lower()
+
+    # and no second session was conjured for that structure
+    listed = client.get(f"{API}/sessions", headers=headers).json()
+    for_structure = [s for s in listed if s["structure"]["code"] == "DSI"]
+    assert len(for_structure) == 1
+    assert for_structure[0]["id"] == session_id
+
+
+def test_a_closed_interview_is_still_readable_and_downloadable(client):
+    headers = authenticate(client, "client@example.com")
+    session_id = _start(client, headers).json()["state"]["id"]
+    answer(client, headers, session_id, "Mme Sonia Ben Ammar")
+    finish(client, headers, session_id)
+
+    detail = client.get(f"{API}/sessions/{session_id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["state"]["completed_at"], "the closure date is reported"
+
+    export = client.post(f"{API}/sessions/{session_id}/export", headers=headers)
+    assert export.status_code == 200
+    served = client.get(
+        f"{API}/exports/{export.json()['download_token']}", headers=headers
+    )
+    assert served.status_code == 200
 
 
 def test_manual_override_bypasses_the_model(client):

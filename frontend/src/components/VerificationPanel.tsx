@@ -35,6 +35,9 @@ export function VerificationPanel({
 }: Props) {
   const isGrid = pending.kind === "grid";
   const isEdit = mode === "edit";
+  // Opened from the review, a point may never have been answered at all -
+  // telling someone they are "relisant" an empty table reads as a bug.
+  const isBlank = isEdit && !pending.value && !pending.rows?.length;
   const [value, setValue] = useState(pending.value ?? "");
   const [rows, setRows] = useState<Record<string, string>[]>(
     () => (pending.rows?.length ? pending.rows : [blankRow(pending)]),
@@ -78,7 +81,7 @@ export function VerificationPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">
-              {isEdit ? `Modifier · ${pending.section}` : "Vérification"}
+              {isEdit ? `${isBlank ? "Répondre" : "Modifier"} · ${pending.section}` : "Vérification"}
             </div>
             <h2 className="mt-1 font-display text-[15px] font-semibold text-ink-100">
               {pending.label}
@@ -101,12 +104,14 @@ export function VerificationPanel({
                   : "border border-accent-fire/40 bg-accent-fire/10 text-ink-100"
               }`}
             >
-              {isEdit ? "Enregistré" : "À confirmer"}
+              {isEdit ? (isBlank ? "Sans réponse" : "Enregistré") : "À confirmer"}
             </span>
           </div>
         </div>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-300">
-          {isEdit
+          {isBlank
+            ? "Ce point n'a pas encore de réponse : la rubrique serait vide dans le document. Renseignez-la ici."
+            : isEdit
             ? "Vous relisez une réponse déjà enregistrée. Toute modification remplace ce qui sera écrit dans le document."
             : "Voici ce que j'ai retenu. Corrigez ce qui doit l'être, puis confirmez : rien n'est écrit dans le document tant que vous n'avez pas validé."}
         </p>
@@ -239,7 +244,7 @@ export function VerificationPanel({
           {busy
             ? "Enregistrement…"
             : isEdit
-              ? "Enregistrer la correction"
+              ? (isBlank ? "Enregistrer la réponse" : "Enregistrer la correction")
               : "Confirmer et continuer vers la question suivante"}
         </button>
         <button

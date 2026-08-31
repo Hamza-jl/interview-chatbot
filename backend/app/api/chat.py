@@ -12,6 +12,7 @@ from app.api import deps
 from app.api.survey import (
     append_message,
     build_state,
+    end_of_plan,
     pending_answer,
     read_answer,
     store_answer,
@@ -21,6 +22,7 @@ from app.core.config import settings
 from app.core.crypto import open_json, unwrap_dek
 from app.db.models import Answer, ChatMessage, SurveySession, utcnow
 from app.db.session import get_db
+from app.pca import transcript
 from app.pca.blueprint import get_plan
 from app.schemas.api import ChatRequest, ChatResponse
 
@@ -74,9 +76,21 @@ def send_message(
             detail="Cet entretien est clôturé. Vous pouvez télécharger le document produit.",
         )
 
-    dek = unwrap_dek(survey.wrapped_dek)
     plan = get_plan(survey.template_kind)
     total = len(plan)
+    # Past the last question the session is awaiting its final review. Clamping
+    # the cursor back here would file the message against a question that has
+    # already been confirmed - the interviewee picks a blank point or closes.
+    if survey.cursor >= total:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Toutes les questions ont été parcourues. Sélectionnez un point "
+                "à compléter, ou clôturez l'entretien."
+            ),
+        )
+
+    dek = unwrap_dek(survey.wrapped_dek)
     cursor = max(0, min(survey.cursor, total - 1))
     question = plan[cursor]
 
@@ -91,6 +105,7 @@ def send_message(
         position=f"question {cursor + 1} sur {total}",
         existing=_existing_payload(db, survey, dek, question.id),
         followups=survey.followups,
+        total=total,
     )
 
     recorded = False
@@ -121,6 +136,7 @@ def send_message(
                   "completeness": result.completeness, "engine": result.engine},
         )
         db.commit()
+        transcript.save(db, survey, dek)
         db.refresh(reply_row)
 
         from app.api.survey import _message_out
@@ -139,10 +155,8 @@ def send_message(
     completed = False
     reply_text = result.reply
     if cursor >= total:
-        survey.status = "completed"
-        survey.completed_at = utcnow()
-        completed = True
-        reply_text = f"{result.reply}\n\n{engine.closing(survey.structure.name)}"
+        tail, completed = end_of_plan(db, survey)
+        reply_text = f"{result.reply}\n\n{tail}"
     else:
         next_question = plan[cursor]
         if result.advance or result.nav in {"suivant", "precedent"}:
@@ -172,6 +186,7 @@ def send_message(
         },
     )
     db.commit()
+    transcript.save(db, survey, dek)
     db.refresh(reply_row)
 
     from app.api.survey import _message_out
@@ -183,6 +198,13 @@ def send_message(
         recorded=recorded,
         completed=completed,
     )
+
+
+# Turns that are not attempts at answering, and so never burn a follow-up. The
+# allowance exists for the case it was built for: an answer the engine could not
+# get anything usable out of (intent "reponse", no data). Off-topic belongs here
+# too - it is by definition not an answer.
+_CONVERSATIONAL = {"salutation", "question", "navigation", "hors_sujet"}
 
 
 def _move_cursor(
@@ -197,6 +219,14 @@ def _move_cursor(
         cursor = max(0, cursor - 1)
     elif result.advance or result.nav == "suivant":
         cursor += 1
+    elif result.intent in _CONVERSATIONAL:
+        # Courtesy, a definition request or a question about the workshop holds
+        # the interview where it is, free of charge. The follow-up allowance is
+        # there for answers the engine could not use - spending it on ordinary
+        # conversation advanced the interview past a question nobody had
+        # answered: four such turns in a row were enough to skip question 1.
+        survey.cursor = cursor
+        return cursor
     else:
         # Held on the same question: count the relance so we never loop forever.
         survey.followups += 1

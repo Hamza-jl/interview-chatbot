@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ApiError, api, type SessionDetail, type SessionState, type Structure } from "../lib/api";
 import { Spinner } from "./AuthFlow";
+import { CompletedInterview } from "./CompletedInterview";
 
 export function StructurePicker({
   onOpen,
@@ -15,6 +16,7 @@ export function StructurePicker({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [closed, setClosed] = useState<Structure | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -35,9 +37,18 @@ export function StructurePicker({
 
   const progressByStructure = useMemo(() => {
     const map = new Map<string, SessionState>();
-    for (const session of sessions) map.set(session.structure.id, session);
+    for (const session of sessions) {
+      // A closed interview wins over an open one for the same entity: it is
+      // the one that decides whether the structure can still be documented.
+      const held = map.get(session.structure.id);
+      if (held && held.status === "completed") continue;
+      map.set(session.structure.id, session);
+    }
     return map;
   }, [sessions]);
+
+  const selectedSession = selected ? progressByStructure.get(selected) ?? null : null;
+  const isClosed = selectedSession?.status === "completed";
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -51,7 +62,13 @@ export function StructurePicker({
   }, [structures, query]);
 
   async function start() {
-    if (!selected) return;
+    if (!selected || !structures) return;
+    // A closed interview is never restarted - the server refuses too, this
+    // just means the refusal is not what the interviewee meets first.
+    if (isClosed) {
+      setClosed(structures.find((s) => s.id === selected) ?? null);
+      return;
+    }
     setBusy(true);
     try {
       const detail = await api<SessionDetail>("/sessions", {
@@ -62,6 +79,16 @@ export function StructurePicker({
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Ouverture impossible.");
       setBusy(false);
+    }
+  }
+
+  /** Reopen a closed interview read-only, to relire or correct an answer. */
+  async function consult(session: SessionState) {
+    try {
+      onOpen(await api<SessionDetail>(`/sessions/${session.id}`));
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Ouverture impossible.");
+      setClosed(null);
     }
   }
 
@@ -174,15 +201,30 @@ export function StructurePicker({
                     <div className="mt-3 flex items-center gap-2">
                       <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink-700">
                         <div
-                          className="h-full bg-poppy-500"
+                          className={`h-full ${
+                            progress.status === "completed" ? "bg-accent-mint" : "bg-poppy-500"
+                          }`}
                           style={{ width: `${progress.percent}%` }}
                         />
                       </div>
-                      <span className="text-[11px] font-medium text-ink-400">
-                        {progress.status === "completed"
-                          ? "Terminé"
-                          : `Repris a ${progress.percent}%`}
-                      </span>
+                      {progress.status === "completed" ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent-mint/40 bg-accent-mint/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent-mint">
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path
+                              d="m5 13 4 4L19 7"
+                              stroke="currentColor"
+                              strokeWidth="3.4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          Terminé
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[11px] font-medium text-ink-400">
+                          En cours · {progress.percent} %
+                        </span>
+                      )}
                     </div>
                   )}
                 </motion.button>
@@ -199,11 +241,34 @@ export function StructurePicker({
       )}
 
       <div className="sticky bottom-5 mt-8 flex justify-center">
-        <button onClick={start} disabled={!selected || busy} className="btn-primary min-w-[16rem]">
+        <button
+          onClick={start}
+          disabled={!selected || busy}
+          className={`min-w-[16rem] ${isClosed ? "btn-ghost !bg-ink-900" : "btn-primary"}`}
+        >
           {busy ? <Spinner /> : null}
-          {busy ? "Ouverture de l'entretien…" : "Démarrer l'entretien"}
+          {busy
+            ? "Ouverture de l'entretien…"
+            : isClosed
+              ? "Entretien terminé — voir le document"
+              : selectedSession
+                ? `Reprendre l'entretien · ${selectedSession.percent} %`
+                : "Démarrer l'entretien"}
         </button>
       </div>
+
+      <AnimatePresence>
+        {closed && selectedSession && (
+          <CompletedInterview
+            key="already-done"
+            structure={closed}
+            session={selectedSession}
+            onConsult={() => consult(selectedSession)}
+            onClose={() => setClosed(null)}
+            onError={onError}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

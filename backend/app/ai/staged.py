@@ -24,7 +24,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.ai import social
+from app.ai import faq, social
+from app.core.config import settings
 from app.ai.llm import LLMUnavailable
 from app.pca import glossary
 from app.pca.blueprint import Question
@@ -321,8 +322,8 @@ def answer_definition(message: str, question: Question) -> str:
             parts.append(
                 "Colonnes, dans l'ordre : "
                 + " | ".join(c.label for c in question.columns)
-                + "\n\nVous pouvez aussi utiliser la saisie guidee, qui remplit "
-                "chaque colonne separement."
+                + "\n\nVous pouvez aussi utiliser la saisie guidée, qui remplit "
+                "chaque colonne séparément."
             )
         if question.help:
             parts.append(question.help)
@@ -332,9 +333,19 @@ def answer_definition(message: str, question: Question) -> str:
     hits = glossary.search(message, limit=2)
     if hits:
         body = "\n\n".join(f"**{entry.term}**\n{entry.definition}" for entry in hits)
-        return f"{body}\n\nPour revenir a notre point : {question.prompt}"
+        return f"{body}\n\nPour revenir à notre point : {question.prompt}"
+    # A miss on a phrasing that really is asking what a term means deserves an
+    # honest 'not in the referential' - accurate, and it routes the question to a
+    # human. Anything else that got this far is simply not what this tool is for,
+    # and saying so plainly beats a glossary miss dressed up as an answer.
+    if not faq.asks_for_a_definition(message):
+        return faq.out_of_scope(question.prompt)
+
     return (
-        "Ce terme ne figure pas dans le référentiel de l'atelier. Je note votre question "
-        "pour le consultant Devoteam, qui vous repondra precisement.\n\n"
+        "Ce terme ne figure pas dans le référentiel de l'atelier, et je préfère ne "
+        "rien avancer d'approximatif sur un document d'audit. Je note votre question "
+        f"pour le consultant {settings.CONSULTING_ORG}, qui vous répondra précisément.\n\n"
+        "Vous pouvez aussi me demander un exemple de réponse attendue, ou passer la "
+        "question et y revenir plus tard.\n\n"
         f"Pour revenir à notre point : {question.prompt}"
     )

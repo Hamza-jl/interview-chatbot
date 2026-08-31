@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from app.ai import social, staged
+from app.ai import faq, social, staged
 from app.ai.llm import (
     LLMUnavailable,
     active_backend,
@@ -86,7 +86,7 @@ REGLE DE FIDELITE (imperative)
 Le document produit est un document d'audit : une valeur inventee est une faute grave.
 - Si une information manque, tu la listes dans « missing » et tu la demandes ; tu ne la devines pas.
 - Si tu ne trouves pas la reponse a une question de definition dans le referentiel, tu le dis \
-et tu proposes de noter la question pour le consultant Devoteam.
+et tu proposes de noter la question pour le consultant {settings.CONSULTING_ORG}.
 
 QUALITE DE L'EXTRACTION
 - « value » (questions redigees) : une reformulation propre, structuree et fidele de ce que \
@@ -259,6 +259,7 @@ def run_turn(
     position: str,
     existing: Optional[Dict[str, Any]],
     followups: int,
+    total: int = 0,
 ) -> TurnResult:
     text = sanitize(user_message)
 
@@ -316,6 +317,25 @@ def run_turn(
             completeness="vide",
             advance=nav == "suivant",
             nav=nav,
+            engine=llm_label(),
+        )
+
+    # Questions about the interview itself - "qui es-tu ?", "pourquoi cet
+    # entretien ?", "que deviennent mes reponses ?". None of these is a glossary
+    # term, so the referential search answered them with "ce terme ne figure pas
+    # dans le referentiel": a non-answer to a question the assistant knows
+    # perfectly well. Deterministic and ahead of the model, like courtesy.
+    topic = faq.match(text)
+    if topic is not None:
+        empty = {"rows": []} if question.kind == "grid" else {"value": ""}
+        return TurnResult(
+            intent="question",
+            reply=faq.answer(topic, ASSISTANT_NAME, question.prompt, total),
+            has_data=False,
+            data=empty,
+            completeness="vide",
+            advance=False,
+            nav="aucun",
             engine=llm_label(),
         )
 
@@ -495,10 +515,9 @@ def _staged_turn(
     if intent == "hors_sujet":
         return TurnResult(
             intent="hors_sujet",
-            reply=(
-                "Restons si vous le voulez bien sur l'État des lieux.\n\n"
-                f"{question.prompt}"
-            ),
+            # Off topic is neither a glossary miss nor a failed answer: say
+            # what this assistant is for, and point elsewhere for the rest.
+            reply=faq.out_of_scope(question.prompt),
             has_data=False, data=empty, completeness="vide",
             advance=False, nav="aucun", engine=label,
         )
@@ -511,7 +530,7 @@ def _staged_turn(
                 intent="reponse",
                 reply=(
                     "Je n'ai pas réussi a en tirer une ligne de tableau. Vous pouvez utiliser "
-                    "la saisie guidee, ou séparer les colonnes par « | ».\n\n"
+                    "la saisie guidée, ou séparer les colonnes par « | ».\n\n"
                     f"Exemple : {question.example}"
                 ),
                 has_data=False, data=empty, completeness="vide",
@@ -665,12 +684,19 @@ def _heuristic_turn(
         hits = glossary.search(text, limit=2)
         if hits:
             body = "\n\n".join(f"**{e.term}**\n{e.definition}" for e in hits)
-            reply = f"{body}\n\nPour revenir a notre point : {question.prompt}"
+            reply = f"{body}\n\nPour revenir à notre point : {question.prompt}"
         else:
+            # Same split as the staged path: an honest referential miss for a
+            # real definition request, a plain refusal for anything else. The
+            # org name comes from configuration, never hardcoded.
             reply = (
-                "Je n'ai pas de définition de ce terme dans le référentiel de l'atelier. "
-                "Je note votre question pour le consultant Devoteam.\n\n"
-                f"Pour revenir à notre point : {question.prompt}"
+                faq.out_of_scope(question.prompt)
+                if not faq.asks_for_a_definition(text)
+                else (
+                    "Ce terme ne figure pas dans le référentiel de l'atelier. Je note "
+                    f"votre question pour le consultant {settings.CONSULTING_ORG}.\n\n"
+                    f"Pour revenir à notre point : {question.prompt}"
+                )
             )
         return TurnResult(
             intent="question", reply=reply, has_data=False, data=empty,

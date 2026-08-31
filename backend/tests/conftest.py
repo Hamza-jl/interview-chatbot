@@ -27,6 +27,12 @@ os.environ.update(
     DATABASE_URL=f"sqlite+pysqlite:///{Path(_TMP, 'test.db').as_posix()}",
     EXPORT_DIR=str(Path(_TMP, "exports")),
     TEMPLATE_DIR=str(ROOT / "templates"),
+    # Pinned off, and pointed at scratch even so. The developer's own .env may
+    # well enable transcripts and aim them at a real folder; a test run must
+    # never drop fixture interviews into it. Tests that want the writer switch
+    # it on themselves against a tmp_path.
+    TRANSCRIPT_ENABLED="false",
+    TRANSCRIPT_DIR=str(Path(_TMP, "transcripts")),
     # Pinned off: the suite must not reach a model. It exercises the
     # deterministic engine, so it stays fast, offline and reproducible even on
     # a machine where Ollama happens to be running.
@@ -173,6 +179,17 @@ def confirm(client: TestClient, headers: dict, session_id: str, pending: dict,
         body["value"] = value if value is not None else pending.get("value") or ""
     res = client.post(f"{API}/sessions/{session_id}/confirm", headers=headers, json=body)
     assert res.status_code == 200, res.text
+    return res.json()
+
+
+def finish(client: TestClient, headers: dict, session_id: str,
+           acknowledge: bool = True, expect: int = 200) -> dict:
+    """Close the interview the way the review gate does."""
+    res = client.post(
+        f"{API}/sessions/{session_id}/finish", headers=headers,
+        json={"acknowledge": acknowledge},
+    )
+    assert res.status_code == expect, res.text
     return res.json()
 
 

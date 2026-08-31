@@ -42,7 +42,9 @@ export function ThankYou({
   }
 
   const firstName = user.full_name.split(/\s+/)[0];
-  const blank = state.sections.filter((section) => section.answered < section.total);
+  // The points themselves, not the sections holding them: "4. Contraintes
+  // operationnelles" says nothing about which of its questions is empty.
+  const blank = state.missing;
 
   return (
     <motion.div
@@ -109,7 +111,7 @@ export function ThankYou({
               </div>
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-300">
                 Ces rubriques apparaissent vides dans le document :{" "}
-                <span className="text-ink-200">{blank.map((s) => s.title).join(", ")}</span>. Vous
+                <span className="text-ink-200">{blank.map((s) => s.label).join(", ")}</span>. Vous
                 pouvez les compléter avec votre consultant Devoteam.
               </p>
             </div>

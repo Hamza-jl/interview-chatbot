@@ -285,3 +285,199 @@ def test_a_definition_request_never_produces_table_rows():
         assert result.intent == "question", phrasing
         assert result.has_data is False, phrasing
         assert result.data == {"rows": []}, phrasing
+
+
+# --------------------------------------------------------------------------- #
+# Questions about the interview itself
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "message,topic",
+    [
+        ("qui est tu ?", "identite"),          # the spoken form, as it actually arrived
+        ("qui es-tu ?", "identite"),
+        ("qui êtes-vous ?", "identite"),
+        ("tu es qui", "identite"),
+        ("es-tu un robot ?", "identite"),
+        ("es tu une IA ?", "identite"),
+        ("présente-toi", "identite"),
+        ("pourquoi nous faisons cet entretien ?", "objectif"),
+        ("pourquoi cet entretien ?", "objectif"),
+        ("pourquoi on fait ce questionnaire", "objectif"),
+        ("à quoi ça sert ?", "objectif"),
+        ("quel est l'objectif de cet atelier ?", "objectif"),
+        ("dans quel but ?", "objectif"),
+        ("combien de temps ça va prendre ?", "duree"),
+        ("combien de questions ?", "duree"),
+        ("c'est long ?", "duree"),
+        ("que faites-vous de mes réponses ?", "donnees"),
+        ("où vont mes données ?", "donnees"),
+        ("qui va lire mes réponses ?", "donnees"),
+        ("c'est confidentiel ?", "donnees"),
+        ("est-ce que je peux m'arrêter ?", "reprise"),
+        ("puis-je reprendre plus tard ?", "reprise"),
+        ("comment ça marche ?", "fonctionnement"),
+        ("aide", "fonctionnement"),
+    ],
+)
+def test_a_question_about_the_interview_is_recognised(message, topic):
+    from app.ai import faq
+
+    assert faq.match(message) == topic
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # Real interview content that must never be mistaken for a meta question.
+        "Mme Leila Ben Salah",
+        "Le responsable est M. Fabrice HAUHOUOT",
+        "qui est le responsable de la structure ?",
+        "qui sont nos partenaires principaux ?",
+        "Nous n'avons pas de comités formalisés",
+        "Que signifie PDMA ?",
+        "que veux tu dire par (V, C, MC, PC) ?",
+        "Analyse des risques et audit des SI, pour l'ensemble des entités de la banque",
+        "bonjour",
+    ],
+)
+def test_interview_content_is_not_mistaken_for_a_meta_question(message):
+    from app.ai import faq
+
+    assert faq.match(message) is None, f"{message!r} is interview content"
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["qui est tu ?", "pourquoi nous faisons cet entretien ?", "que faites-vous de mes réponses ?"],
+)
+def test_a_meta_question_is_answered_and_records_nothing(message):
+    """It used to reply 'ce terme ne figure pas dans le référentiel' to all three."""
+    plan = get_plan("entite")
+    result = run_turn(
+        plan[0], message, [], structure_name="Audit Technologique",
+        template_label="entite", position="question 1 sur 18",
+        existing=None, followups=0, total=len(plan),
+    )
+    assert result.intent == "question"
+    assert result.has_data is False, "a question about the workshop is not an answer"
+    assert result.advance is False, "and it must not consume a question"
+    assert "référentiel" not in result.reply, "it is answered, not deflected"
+    assert plan[0].prompt in result.reply, "the interview question is re-asked"
+
+
+def test_the_length_answer_quotes_the_plan_actually_loaded():
+    for kind in ("entite", "dsi"):
+        plan = get_plan(kind)
+        result = run_turn(
+            plan[0], "combien de questions ?", [], structure_name="X",
+            template_label=kind, position="1", existing=None, followups=0,
+            total=len(plan),
+        )
+        assert f"{len(plan)} points" in result.reply, kind
+
+
+# --------------------------------------------------------------------------- #
+# Conversation must never consume a question
+# --------------------------------------------------------------------------- #
+def test_talking_to_the_assistant_never_advances_the_interview():
+    """The reported bug: four conversational turns skipped question 1.
+
+    Courtesy and questions were charged against the follow-up allowance, which
+    exists for answers the engine could not use. Two of them were enough to
+    force the cursor forward onto a question nobody had answered.
+    """
+    from app.api.chat import _move_cursor
+
+    class _Survey:
+        cursor = 0
+        followups = 0
+
+    plan = get_plan("entite")
+    survey = _Survey()
+
+    for message in [
+        "bonjour",
+        "qui est tu ?",
+        "pourquoi nous faisons cet entretien ?",
+        "qui est tu ?",
+        "c'est quoi Devoteam ?",
+        "combien de temps ça va prendre ?",
+        "quel temps fait-il à Tunis ?",
+        "merci",
+    ]:
+        result = run_turn(
+            plan[survey.cursor], message, [{"role": "user", "body": "x"}],
+            structure_name="Audit Technologique", template_label="entite",
+            position="question 1 sur 18", existing=None,
+            followups=survey.followups, total=len(plan),
+        )
+        _move_cursor(survey, result, survey.cursor, len(plan))
+        assert result.has_data is False, message
+
+    assert survey.cursor == 0, "the interview must still be on the unanswered question"
+    assert survey.followups == 0, "conversation does not burn the follow-up allowance"
+
+
+def test_the_follow_up_allowance_still_protects_against_looping():
+    """It must still advance when the engine cannot use a real answer attempt."""
+    from app.ai.engine import MAX_FOLLOWUPS, TurnResult
+    from app.api.chat import _move_cursor
+
+    class _Survey:
+        cursor = 0
+        followups = 0
+
+    survey = _Survey()
+    unusable = TurnResult(
+        intent="reponse", reply="", has_data=False, data={"value": ""},
+        completeness="vide", advance=False, nav="aucun",
+    )
+    for _ in range(MAX_FOLLOWUPS + 1):
+        _move_cursor(survey, unusable, survey.cursor, 18)
+
+    assert survey.cursor == 1, "an unusable answer still moves on eventually"
+
+
+@pytest.mark.parametrize(
+    "message", ["quel temps fait-il à Tunis ?", "tu peux m'écrire un poème ?"]
+)
+def test_an_off_topic_request_is_declined_with_its_scope(message):
+    plan = get_plan("entite")
+    result = run_turn(
+        plan[0], message, [{"role": "user", "body": "x"}], structure_name="X",
+        template_label="entite", position="1", existing=None, followups=0,
+        total=len(plan),
+    )
+    assert result.has_data is False
+    assert "sort de mon champ" in result.reply, "it says plainly that it cannot"
+    assert "état des lieux" in result.reply, "and what it is for instead"
+
+
+def test_a_genuine_definition_miss_is_not_treated_as_off_topic():
+    """'Que signifie X' deserves the honest referential answer, not a brush-off."""
+    plan = get_plan("entite")
+    result = run_turn(
+        plan[0], "Que signifie le terme zorglub ?", [{"role": "user", "body": "x"}],
+        structure_name="X", template_label="entite", position="1",
+        existing=None, followups=0, total=len(plan),
+    )
+    assert "référentiel" in result.reply
+    assert "sort de mon champ" not in result.reply
+
+
+def test_the_assistant_knows_who_runs_the_workshop():
+    """Built from deployment config - the names differ per install."""
+    from app.ai import faq
+    from app.core.config import settings
+
+    org, client = settings.CONSULTING_ORG, settings.CLIENT_NAME
+    for phrasing in [f"c'est quoi {org} ?", f"qui est {org}", f"c'est quoi {client} ?"]:
+        assert faq.match(phrasing) == "organisateur", phrasing
+
+    plan = get_plan("entite")
+    reply = run_turn(
+        plan[0], f"c'est quoi {org} ?", [], structure_name="X",
+        template_label="entite", position="1", existing=None, followups=0,
+        total=len(plan),
+    ).reply
+    assert org in reply and client in reply

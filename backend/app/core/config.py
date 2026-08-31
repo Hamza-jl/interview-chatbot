@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     EXPORT_DIR: str = "./var/exports"
     MAX_BODY_BYTES: int = 256 * 1024
 
+    # ---- transcripts ---------------------------------------------------------
+    # A readable log of each interview, one file per entity, rewritten after
+    # every turn. Off by default, and for good reason: the database keeps every
+    # answer encrypted per field, and these files are PLAINTEXT on disk. Turning
+    # it on is a deliberate trade of confidentiality for legibility - put the
+    # directory somewhere the operating system protects.
+    TRANSCRIPT_ENABLED: bool = False
+    TRANSCRIPT_DIR: str = "./var/transcripts"
+
     # ---- LLM ----------------------------------------------------------------
     # "auto" picks Anthropic when a key is present, else a reachable Ollama,
     # else the deterministic engine. Pin it explicitly in production.

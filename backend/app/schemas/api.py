@@ -100,6 +100,15 @@ class ProgressSection(BaseModel):
     active: bool
 
 
+class MissingPoint(BaseModel):
+    """A question the interviewee has never answered - or emptied since."""
+
+    question_id: str
+    label: str
+    section: str
+    index: int
+
+
 class SessionState(BaseModel):
     id: str
     structure: StructureOut
@@ -111,6 +120,12 @@ class SessionState(BaseModel):
     percent: int
     question: Optional[QuestionOut]
     sections: List[ProgressSection]
+    # Points still blank, and whether the interview has run to the end with
+    # some of them left that way. The document must never be produced from
+    # under the interviewee while these are outstanding.
+    missing: List[MissingPoint] = Field(default_factory=list)
+    awaiting_review: bool = False
+    completed_at: Optional[str] = None
     degraded: bool = False
     engine: str = ""   # which model produced the last turn
 
@@ -187,6 +202,19 @@ class AnswerOut(BaseModel):
     confirmed: bool = False
     value: Optional[str] = None
     rows: Optional[List[Dict[str, str]]] = None
+    # The question's own metadata travels with the answer so the review panel
+    # can open ANY point - including one never answered, which has no stored
+    # rows to infer a column set from.
+    prompt: str = ""
+    help: str = ""
+    example: str = ""
+    columns: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class FinishRequest(BaseModel):
+    """Close the interview. Blank points must be acknowledged explicitly."""
+
+    acknowledge: bool = False
 
 
 class ExportOut(BaseModel):
