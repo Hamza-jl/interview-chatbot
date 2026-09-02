@@ -439,3 +439,67 @@ L'ancien entretien subsiste et reste visible dans **Suivi de la collecte** — i
 peut donc y avoir deux lignes pour une même entité le temps de la transition.
 Si la collecte avait déjà commencé, relevez l'avancement avant de basculer :
 rien n'est perdu, mais rien n'est repris automatiquement non plus.
+
+---
+
+## Si vous avez déjà lancé le seed avant cette version
+
+Une version antérieure proposait `entites.local` par défaut. Les adresses
+construites sur un suffixe réservé (`.local`, `.test`, `.invalid`, `.localhost`)
+sont **refusées à la connexion** : les comptes existent en base et personne ne
+peut s'en servir. Le seed les refuse désormais d'avance, mais il ne répare pas
+ceux déjà créés — il ignore les comptes existants.
+
+Vérifiez :
+
+```powershell
+docker compose exec api python -c "
+from sqlalchemy import select
+from app.db.session import SessionLocal
+from app.db.models import User
+bad = ('.local','.test','.invalid','.localhost')
+with SessionLocal() as db:
+    rows = [u.email for u in db.execute(select(User)).scalars()
+            if u.email.rsplit('@',1)[-1].endswith(bad)]
+    print(len(rows), 'compte(s) inutilisable(s)'); print(*rows[:5], sep=chr(10))"
+```
+
+Si la liste n'est pas vide, corrigez `PARTICIPANT_EMAIL_DOMAIN` dans le `.env`,
+supprimez ces comptes, puis relancez le seed :
+
+```powershell
+docker compose exec api python -c "
+from sqlalchemy import select
+from app.db.session import SessionLocal
+from app.db.models import User
+bad = ('.local','.test','.invalid','.localhost')
+with SessionLocal() as db:
+    n = 0
+    for u in db.execute(select(User)).scalars():
+        if u.email.rsplit('@',1)[-1].endswith(bad):
+            db.delete(u); n += 1
+    db.commit(); print(n, 'supprimé(s)')"
+
+docker compose restart api
+docker compose exec api python -m app.scripts.seed --credentials-file /srv/var/transcripts/identifiants.csv
+```
+
+> Supprimer un compte supprime **ses entretiens**. À ne faire que si la collecte
+> n'a pas commencé — ce qui est le cas si personne n'a jamais pu se connecter.
+
+---
+
+## Pourquoi il n'y a pas de compte de test sur le serveur
+
+`app.scripts.demo_account` crée deux comptes prêts à l'emploi, avec un mot de
+passe **et un secret TOTP connus d'avance**. C'est confortable sur un poste de
+développement et inacceptable sur un serveur : le script s'arrête donc lorsque
+`ENV=prod`, ce qui est le cas ici.
+
+```
+Refusé : ENV=prod.
+```
+
+Pour essayer l'application sur le serveur, servez-vous d'un vrai compte issu du
+seed — par exemple une entité dont la collecte n'a pas encore commencé, ou l'un
+des comptes d'administration.
