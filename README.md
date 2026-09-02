@@ -24,7 +24,7 @@ Authentication          Interview                Verification            Documen
 └────────────┘
 ```
 
-Three properties make it usable for work that has to be right.
+Four properties make it usable for work that has to be right.
 
 **It tells a question from an answer.** *"What does criticality level V mean?"* is
 answered from a glossary built out of the template's own footnotes, and nothing
@@ -37,6 +37,13 @@ can be, and the model is overruled when it disagrees with hard evidence.
 it will appear in the document — column headers locked, because they come from
 the template; cells editable; rows addable. A draft counts for no progress and
 never reaches the deliverable.
+
+**Nothing closes with silent gaps.** Running out of questions is not the same as
+having answered them. When the last question is passed the interview stops one
+step short and lists what is still blank, each entry a way back in. Closing over
+gaps is allowed — some points genuinely have no answer — but it takes an
+explicit acknowledgement, and the document is only ever produced from a
+deliberately closed interview.
 
 **It fills the original file.** The template is opened and written into, not
 regenerated: styles, table of contents, headers and pre-printed instructions all
@@ -55,6 +62,7 @@ an organisation breaks.
 | Answers must not be invented | Schema-constrained output, deterministic guards, human confirmation |
 | Data must not leave the network | Runs entirely against a local model via Ollama |
 | Actions must be provable afterwards | Hash-chained audit log; tampering is detectable to the row |
+| One record per entity | An interview is opened once and never silently restarted |
 
 Nothing an interviewee types is stored readable — not in the database, the logs,
 the audit trail, or on disk.
@@ -78,12 +86,66 @@ path is therefore decomposed into small single-purpose calls
 rows. That is both more reliable and faster, since each call emits far fewer
 tokens.
 
+**Deterministic filters run before any model call.** Courtesy (`app/ai/social.py`),
+navigation, and questions about the workshop itself (`app/ai/faq.py`) are matched
+on the whole message and answered without inference. These are the cases where a
+small model's judgement is worth nothing and the right answer is fixed — and
+where a misclassification is expensive: a greeting recorded as an answer puts
+"hello" in an audit document.
+
 Definitions are served **verbatim** from the glossary rather than paraphrased. In
 a document that will be audited the source wording is what matters, and a small
-model cannot mangle text it never generates.
+model cannot mangle text it never generates. A term that is genuinely absent is
+admitted as absent; anything outside the workshop is declined plainly.
 
 If a model call fails mid-interview the deterministic engine takes that turn and
 the interface says so. A network incident never costs a session.
+
+## Two ways to collect
+
+The same question plan drives both, generated from one source
+(`app/pca/blueprint.py`) rather than transcribed — so the two routes cannot
+drift into asking different questions.
+
+**The chatbot**, for a guided conversation with verification at every step.
+
+**Google Forms**, for correspondents who will not sit through an interview.
+`app/scripts/export_forms_spec.py` emits an Apps Script bundle that builds two
+forms — one for the entity plan, one for the longer IT plan — and
+`app/scripts/from_forms.py` feeds the exported responses back through the *same*
+template filler, so both routes emit identical documents for identical answers.
+See [`google-forms/README.md`](google-forms/README.md).
+
+Google cannot produce the deliverable itself: the templates have fixed tables and
+merged cells that do not survive a round trip through Google Docs.
+
+## Oversight
+
+Accounts carry a role. An **administrator** gets a progress screen covering every
+entity, including the ones nobody has opened: state, points answered, points
+outstanding, participant, last activity.
+
+It is built from the same state the interviewee sees, so the two can never
+disagree, and it exposes **counts and labels only** — the endpoint decrypts
+nothing, and a test asserts that no answer text reaches the wire.
+
+An administrator can also **reset** an interview: it returns to its first
+question and a closed one reopens. That is the only way to undo a wrong entity
+choice, so it is deliberately destructive and deliberately narrow — admin-only,
+confirmed in the interface, and written to the audit chain with the counts it
+destroyed.
+
+## Accounts
+
+One login per entity, each scoped to a single structure by `allowed_structures`.
+The catalogue such an account is served has exactly one entry, and the picker
+selects it automatically. Scoping is enforced **server-side** — opening someone
+else's structure is a 403, not a hidden card.
+
+Addresses derive from the structure code rather than a person's name: the
+correspondent for an entity may change, the entity does not. `seed` can write the
+provisional passwords to a CSV for distribution, because thirty-odd passwords
+cannot be copied out of a console.
 
 ## Getting started
 
@@ -94,7 +156,7 @@ Requires Python 3.11+, Node 20+, and two `.docx` templates — see
 cd backend
 python -m pip install -r requirements.txt
 python -m app.scripts.genkeys --write   # generates .env and three secrets
-python -m app.scripts.seed              # sample catalogue + initial accounts
+python -m app.scripts.seed              # sample catalogue + one account per entity
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --reload
 ```
 
@@ -105,7 +167,9 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. `seed` prints the provisional passwords once; each
-account then enrols an authenticator app and chooses its own password.
+account then enrols an authenticator app and chooses its own password. Add
+`--credentials-file identifiants.csv` to get them as a file instead — it holds
+plaintext secrets, so distribute it and delete it.
 
 For local inference:
 
@@ -123,11 +187,13 @@ shows a "degraded mode" badge, which is convenient for demos.
 cd backend && python -m pytest
 ```
 
-97 tests cover authentication, tenant isolation, encryption, audit-chain
-integrity, the verification flow, engine selection, the prompts built for small
-models, and the fidelity of the question plan to the templates. They run offline:
-the suite pins `LLM_PROVIDER=off` and never reaches a model. Tests that open a
-template skip cleanly when none is present.
+202 tests cover authentication, tenant isolation, encryption, audit-chain
+integrity, the verification flow, the review gate, one-interview-per-entity,
+account scoping, administration, the on-disk logs, the Forms round trip, engine
+selection, the prompts built for small models, and the fidelity of the question
+plan to the templates. They run offline: the suite pins `LLM_PROVIDER=off` and
+never reaches a model. Tests that open a template skip cleanly when none is
+present.
 
 ## Layout
 
@@ -138,20 +204,36 @@ backend/
                ratelimit · audit (hash chain) · middleware (headers, log redaction)
     api/       auth · survey · chat · admin · deps (access guards)
     ai/        llm (Ollama client) · engine (routing) · staged (small models)
-               social (deterministic courtesy and navigation)
+               social (courtesy, navigation) · faq (questions about the workshop)
     pca/       blueprint (question plan) · glossary · docx_filler
+               transcript (readable per-entity log)
     scripts/   genkeys · seed · reset_account
+               export_forms_spec · from_forms (Google Forms round trip)
   templates/   your .docx files - not committed
 frontend/
   src/
     lib/api.ts       access token in memory, silent refresh, CSRF header
     components/      AuthFlow · StructurePicker · Chat · Composer
-                     VerificationPanel · ProgressRail · ThankYou
+                     VerificationPanel · ProgressRail · ReviewGate
+                     CompletedInterview · ThankYou · AdminConsole
+google-forms/  Apps Script generator for the second collection route
+deploy/        key generator, env template, install and update guide
 ```
 
 The question plan is the heart of it. Each entry names the exact table, row and
 column it writes to, so the interview and the document cannot drift apart — and
 two tests fail loudly if they do.
+
+## Transcripts
+
+Optional, off by default. With `TRANSCRIPT_ENABLED=true` every interview is
+written to a Markdown file per entity, rewritten after each turn: the whole
+conversation, every answer, and the points still blank. It answers "what exactly
+did this person say?" long after the fact, without decrypting a database.
+
+The trade is explicit: **these files are plaintext** where the database encrypts
+per field. Point `TRANSCRIPT_DIR` somewhere the operating system protects, or
+leave the feature off.
 
 ## Security
 
@@ -163,6 +245,7 @@ Full detail in [`docs/SECURITY.md`](docs/SECURITY.md). In brief:
 | Sessions | 10-minute JWT held in memory · rotating `HttpOnly` refresh cookie with **reuse detection** |
 | CSRF | HMAC double-submit, bound to the session |
 | Data | **AES-256-GCM per field**, session key wrapped under a master KEK |
+| Authorisation | Per-entity scoping enforced server-side; destructive actions are admin-only |
 | Integrity | **Hash-chained** audit log; the first broken row is reported |
 | Transport | Strict CSP, HSTS, `no-store`, explicit CORS allow-list |
 | Deliverable | Encrypted at rest; download link signed and valid for two minutes |
@@ -178,10 +261,25 @@ going anywhere near real content.
 
 ## Deployment
 
-`docker-compose.yml` runs the API, the SPA behind nginx, and PostgreSQL. Three
-things are mandatory first: `ENV=prod` with TLS terminated upstream and
-`COOKIE_SECURE=true`; the master key served from a secrets manager rather than a
-file; and `CORS_ORIGINS` restricted to the real portal origin.
+`docker-compose.yml` runs four containers on one machine: PostgreSQL, Ollama, the
+API, and the SPA behind nginx. Only nginx publishes a port. Once installed
+nothing needs the internet — inference is local.
+
+Step by step, including update, backup and the traps:
+[`deploy/DEPLOY.md`](deploy/DEPLOY.md).
+
+```bash
+cp deploy/.env.example .env      # then run deploy/generate_keys.py and fill it in
+docker compose up -d --build
+docker compose exec api python -m app.scripts.seed
+```
+
+Two settings deserve a decision rather than a default. `COOKIE_SECURE` must be
+`false` to work over plain HTTP on a LAN — a `Secure` cookie is never returned by
+the browser, so sessions would not survive a minute — which means LAN traffic is
+unencrypted; put TLS in front and set it back to `true`. And `CORS_ORIGINS` must
+match exactly what users type, port included, or the page loads and the login
+fails.
 
 ## Notes
 
