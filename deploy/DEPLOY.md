@@ -93,11 +93,18 @@ PROGRAMME_LABEL=les projets SDSI et SMCA
 CONSULTING_ORG=Devoteam
 CONTACT_NAME=Devoteam Tunisie
 CONTACT_EMAIL=zouheir.belkahia@devoteam.com
+
+PARTICIPANT_EMAIL_DOMAIN=mansabank.tn
 ```
 
 `CORS_ORIGINS` doit correspondre **exactement** à ce que les correspondants
 tapent, port compris. Une erreur ici donne une page qui s'affiche mais dont la
 connexion échoue.
+
+> `PARTICIPANT_EMAIL_DOMAIN` doit être bon **avant** l'étape 5. C'est lui qui
+> forme les 32 adresses (`acf@…`, `si@…`). Le corriger après coup ne renomme
+> rien : le seed ignore les comptes existants et en créerait 32 nouveaux, à
+> côté des premiers.
 
 ### Pourquoi `COOKIE_SECURE=false`
 
