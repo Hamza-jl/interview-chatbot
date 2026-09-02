@@ -171,6 +171,17 @@ account then enrols an authenticator app and chooses its own password. Add
 `--credentials-file identifiants.csv` to get them as a file instead — it holds
 plaintext secrets, so distribute it and delete it.
 
+To try it out without creating real accounts:
+
+```bash
+python -m app.scripts.demo_account
+```
+
+Two ready-to-use logins — one interviewee, one administrator — with a known
+password and a known TOTP secret, so no phone is needed; the script prints the
+current six-digit code. It **refuses to run when `ENV=prod`**: a fixed second
+factor is fine on a laptop and unacceptable on a server.
+
 For local inference:
 
 ```bash

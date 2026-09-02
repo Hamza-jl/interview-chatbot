@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import csv
 import os
+
+import pytest
 import subprocess
 import sys
 from pathlib import Path
@@ -88,7 +90,7 @@ def test_the_credentials_file_lists_every_entity(tmp_path):
     env = {
         **os.environ,
         "DATABASE_URL": f"sqlite+pysqlite:///{(tmp_path / 'seed.db').as_posix()}",
-        "PARTICIPANT_EMAIL_DOMAIN": "entites.test",
+        "PARTICIPANT_EMAIL_DOMAIN": "entites.example.com",
         "PYTHONIOENCODING": "utf-8",
     }
     done = subprocess.run(
@@ -106,7 +108,7 @@ def test_the_credentials_file_lists_every_entity(tmp_path):
     assert all(r["Entite"] for r in rows), "staff rows say Administration, not a dash"
 
     entity = next(r for r in rows if r["Code"] == "ACF")
-    assert entity["Adresse"] == "acf@entites.test"
+    assert entity["Adresse"] == "acf@entites.example.com"
 
 
 def test_seeding_twice_creates_nothing_new(tmp_path):
@@ -127,3 +129,50 @@ def test_seeding_twice_creates_nothing_new(tmp_path):
     second = run()
     assert second.returncode == 0, second.stderr
     assert "Aucun nouveau compte" in second.stdout
+
+
+# --------------------------------------------------------------------------- #
+# The domain has to be one the login endpoint will accept
+# --------------------------------------------------------------------------- #
+def test_the_default_domain_produces_addresses_that_can_sign_in():
+    """A reserved suffix builds 32 accounts that exist and can never log in.
+
+    Nothing stops the database storing `acf@entites.local`; the address
+    validator on /auth/login rejects it, and only when someone tries. Re-seeding
+    does not rename an account, so the mistake is expensive to undo.
+    """
+    from pydantic import BaseModel, EmailStr
+
+    class _Probe(BaseModel):
+        email: EmailStr
+
+    for email, _n, _r, _o, _c in seed.participant_accounts():
+        _Probe(email=email)          # raises if the endpoint would refuse it
+
+
+@pytest.mark.parametrize("domain", ["entites.local", "x.test", "y.invalid", "z.localhost"])
+def test_a_reserved_domain_is_refused_before_anything_is_written(domain, monkeypatch):
+    monkeypatch.setattr(settings, "PARTICIPANT_EMAIL_DOMAIN", domain)
+    with pytest.raises(SystemExit) as refused:
+        seed.participant_accounts()
+    assert "PARTICIPANT_EMAIL_DOMAIN" in str(refused.value)
+
+
+def test_the_demo_accounts_can_also_sign_in():
+    from pydantic import BaseModel, EmailStr
+
+    from app.scripts import demo_account
+
+    class _Probe(BaseModel):
+        email: EmailStr
+
+    for email, _n, _r, _o, _a in demo_account.DEMO_ACCOUNTS:
+        _Probe(email=email)
+
+
+def test_the_demo_script_refuses_to_run_in_production(monkeypatch):
+    """Known password, known second factor - it must never reach a server."""
+    from app.scripts import demo_account
+
+    monkeypatch.setattr(settings, "ENV", "prod")
+    assert demo_account.main([]) == 2

@@ -104,7 +104,11 @@ class Settings(BaseSettings):
     # One login per entity: the seed builds <code>@<domain> for each structure,
     # so a correspondent can only ever open their own. Set it to the client's
     # real mail domain if those addresses must receive mail.
-    PARTICIPANT_EMAIL_DOMAIN: str = "entites.local"
+    #
+    # Must be a normal registrable name. Special-use suffixes - .local, .test,
+    # .invalid, .localhost - are refused by the address validator on the login
+    # endpoint, so accounts built on them are created and can never sign in.
+    PARTICIPANT_EMAIL_DOMAIN: str = "entites.example.com"
 
     # Domain separator for every AAD and token issuer. Changing it on a live
     # deployment makes existing ciphertexts unreadable - pin the original value

@@ -93,6 +93,30 @@ ACCOUNTS = [
 RETIRED = ["participant@mansabank.tn"]
 
 
+def _check_domain(domain: str) -> None:
+    """Refuse a domain the login endpoint would later reject.
+
+    Nothing stops the database storing `acf@entites.local`; the address
+    validator on /auth/login does, and only when someone tries to sign in. The
+    32 accounts would already exist by then, and re-seeding does not rename
+    them. Better to fail here, before anything is written.
+    """
+    from pydantic import BaseModel, EmailStr, ValidationError
+
+    class _Probe(BaseModel):
+        email: EmailStr
+
+    try:
+        _Probe(email=f"probe@{domain}")
+    except ValidationError as exc:  # noqa: BLE001
+        raise SystemExit(
+            f"\n  PARTICIPANT_EMAIL_DOMAIN={domain!r} ne peut pas servir d'adresse.\n"
+            "  Les suffixes réservés (.local, .test, .invalid, .localhost) sont\n"
+            "  refusés à la connexion : les comptes seraient créés sans pouvoir\n"
+            "  jamais se connecter. Utilisez un domaine ordinaire.\n"
+        ) from exc
+
+
 def participant_accounts() -> List[Tuple[str, str, str, str, str]]:
     """One login per entity, each locked to its own structure.
 
@@ -102,6 +126,7 @@ def participant_accounts() -> List[Tuple[str, str, str, str, str]]:
     to entities, and a correspondent may change.
     """
     domain = settings.PARTICIPANT_EMAIL_DOMAIN
+    _check_domain(domain)
     return [
         (f"{code.lower()}@{domain}", name, "client", settings.CLIENT_NAME, code)
         for code, name, _parent, _kind in STRUCTURES
