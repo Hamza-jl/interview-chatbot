@@ -291,6 +291,42 @@ export interface AnswerRow {
   columns: Column[];
 }
 
+/** Where one entity stands. Counts and labels only - never answer content. */
+export interface ProgressRow {
+  structure_id: string;
+  structure: string;
+  code: string;
+  template_kind: string;
+  status: "non_demarre" | "in_progress" | "completed";
+  session_id: string | null;
+  answered: number;
+  total: number;
+  percent: number;
+  missing: string[];
+  participant: { name: string; email: string } | null;
+  started_at: string | null;
+  last_activity_at: string | null;
+  completed_at: string | null;
+}
+
+export interface ProgressReport {
+  structures: number;
+  not_started: number;
+  in_progress: number;
+  completed: number;
+  points_answered: number;
+  points_total: number;
+  rows: ProgressRow[];
+}
+
+export interface ResetReport {
+  session_id: string;
+  structure: string;
+  previous_status: string;
+  answers_deleted: number;
+  messages_deleted: number;
+}
+
 export interface ExportResult {
   id: string;
   filename: string;

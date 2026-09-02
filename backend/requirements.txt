@@ -11,6 +11,8 @@ PyJWT>=2.10
 pyotp>=2.9
 qrcode>=8.0
 python-docx>=1.1.2
+# Reads the Google Forms response workbook (app/scripts/from_forms.py).
+openpyxl>=3.1
 python-multipart>=0.0.20
 anthropic>=1.0,<2
 httpx>=0.28

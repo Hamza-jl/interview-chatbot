@@ -7,13 +7,17 @@ Re-running the script is safe: existing rows are left untouched.
 """
 from __future__ import annotations
 
+import argparse
+import csv
+import pathlib
 import secrets
 import string
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from sqlalchemy import select
 
 from app.core import security
+from app.core.config import settings
 from app.db.models import Structure, User
 from app.db.session import SessionLocal, init_db
 
@@ -71,9 +75,38 @@ ACCOUNTS = [
     # Two logins only. The interviewee account is shared and unrestricted:
     # `allowed_structures=None` lets it open any entity, so the person picks
     # their own from the catalogue after signing in.
-    ("participant@mansabank.tn", "Participant", "client", "MANSA Bank", None),
     ("admin@devoteam.com", "Administrateur plateforme", "admin", "Devoteam", None),
+
+    # L'équipe qui suit la collecte. Rôle « admin » : consultation de
+    # l'avancement de toutes les entités et réinitialisation d'un entretien.
+    # Aucun de ces comptes ne peut lire le contenu des réponses.
+    ("zouheir.belkahia@devoteam.com", "Zouheir Belkahia", "admin", "Devoteam", None),
+    ("tarek.akrout@devoteam.com", "Tarek Akrout", "admin", "Devoteam", None),
+    ("mohamed.amir.essghir@devoteam.com", "Mohamed Amir Essghir", "admin", "Devoteam", None),
+    ("faten.taghouti@devoteam.com", "Faten Taghouti", "admin", "Devoteam", None),
+    ("mohamed.ben.ayed@devoteam.com", "Mohamed Ben Ayed", "admin", "Devoteam", None),
 ]
+
+# Logins replaced by the per-entity accounts below. Left in the database so no
+# audit entry points at a vanished user, but deactivated: a single shared login
+# meant one correspondent at a time, and no way to tell who answered what.
+RETIRED = ["participant@mansabank.tn"]
+
+
+def participant_accounts() -> List[Tuple[str, str, str, str, str]]:
+    """One login per entity, each locked to its own structure.
+
+    `allowed_structures` holds a single code, so the catalogue this account sees
+    has exactly one entry and the picker selects it automatically. The address
+    is derived from the code rather than a person's name: these accounts belong
+    to entities, and a correspondent may change.
+    """
+    domain = settings.PARTICIPANT_EMAIL_DOMAIN
+    return [
+        (f"{code.lower()}@{domain}", name, "client", settings.CLIENT_NAME, code)
+        for code, name, _parent, _kind in STRUCTURES
+    ]
+
 
 _ALPHABET = string.ascii_letters + string.digits + "!@#$%&*?-_"
 
@@ -85,9 +118,18 @@ def strong_password(length: int = 18) -> str:
             return candidate
 
 
-def main() -> int:
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--credentials-file",
+        metavar="CHEMIN",
+        help="écrit les identifiants créés dans un CSV (mots de passe EN CLAIR)",
+    )
+    args = parser.parse_args(argv)
+
     init_db()
-    created: List[Tuple[str, str]] = []
+    created: List[Tuple[str, str, str]] = []
+    retired = 0
 
     with SessionLocal() as db:
         for code, name, parent, kind in STRUCTURES:
@@ -95,7 +137,16 @@ def main() -> int:
                 continue
             db.add(Structure(code=code, name=name, parent=parent, template_kind=kind))
 
-        for email, full_name, role, org, allowed in ACCOUNTS:
+        # Structures must exist before the accounts that point at them.
+        db.flush()
+
+        for email in RETIRED:
+            legacy = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+            if legacy is not None and legacy.is_active:
+                legacy.is_active = False
+                retired += 1
+
+        for email, full_name, role, org, allowed in ACCOUNTS + participant_accounts():
             if db.execute(select(User).where(User.email == email)).scalar_one_or_none():
                 continue
             password = strong_password()
@@ -110,23 +161,47 @@ def main() -> int:
                     allowed_structures=allowed,
                 )
             )
-            created.append((email, password))
+            created.append((email, password, allowed or "—"))
 
         db.commit()
 
-    print("\n  Catalogue des structures : à jour.\n")
-    if created:
-        print("  Comptes créés - notez ces mots de passe, ils ne seront plus affiches :\n")
-        width = max(len(e) for e, _ in created)
-        for email, password in created:
-            print(f"    {email.ljust(width)}   {password}")
-        print(
-            "\n  A la première connexion, chaque compte doit :\n"
-            "    1. enroler une application d'authentification (TOTP),\n"
-            "    2. définir un nouveau mot de passe.\n"
-        )
-    else:
+    print("\n  Catalogue des structures : à jour.")
+    if retired:
+        print(f"  {retired} compte(s) partagé(s) désactivé(s).")
+    print()
+
+    if not created:
         print("  Aucun nouveau compte : la base contenait déjà ces utilisateurs.\n")
+        return 0
+
+    width = max(len(e) for e, _, _ in created)
+    print(f"  {len(created)} compte(s) créé(s). Ces mots de passe ne seront plus affichés :\n")
+    for email, password, scope in created:
+        print(f"    {email.ljust(width)}   {password}   {scope}")
+    print(
+        "\n  À la première connexion, chaque compte doit :\n"
+        "    1. enrôler une application d'authentification (TOTP),\n"
+        "    2. définir un nouveau mot de passe.\n"
+    )
+
+    if args.credentials_file:
+        # 32 mots de passe ne se recopient pas depuis une console. Le fichier
+        # est un pis-aller assumé : il porte des secrets en clair, il sert à
+        # les distribuer, et il se supprime une fois la distribution faite.
+        target = pathlib.Path(args.credentials_file)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.writer(handle, delimiter=";")
+            writer.writerow(["Entite", "Code", "Adresse", "Mot de passe provisoire"])
+            names = {c: n for c, n, _p, _k in STRUCTURES}
+            for email, password, scope in created:
+                # A staff login is scoped to nothing in particular; saying so
+                # beats a dash in a file someone has to read and act on.
+                entity = names.get(scope, "Administration")
+                writer.writerow([entity, scope if scope in names else "", email, password])
+        print(f"  Identifiants écrits dans : {target}")
+        print("  Fichier en clair : distribuez, puis supprimez-le.\n")
+
     return 0
 
 

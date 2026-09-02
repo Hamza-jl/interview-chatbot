@@ -282,22 +282,16 @@ export function Chat({ detail, user, onExit, onError }: Props) {
             </div>
 
             <div className="hidden items-center gap-2 sm:flex">
-              {state.degraded ? (
+              {/* Which model answered is an operational detail, not something
+                  an interviewee needs. The degraded warning stays: it changes
+                  what they should expect from their next answer. */}
+              {state.degraded && (
                 <span
-                  title="Le moteur d'analyse est momentanement indisponible : vos réponses sont enregistrées telles quelles."
+                  title="Le moteur d'analyse est momentanément indisponible : vos réponses sont enregistrées telles quelles."
                   className="rounded-lg border border-accent-fire/30 bg-accent-fire/10 px-2.5 py-1 text-[11px] font-medium text-accent-fire"
                 >
                   Mode dégradé
                 </span>
-              ) : (
-                state.engine && (
-                  <span
-                    title={`Analyse assuree par ${state.engine}`}
-                    className="rounded-lg border border-ink-600 bg-ink-800/70 px-2.5 py-1 text-[11px] font-medium text-ink-300"
-                  >
-                    {state.engine.includes("local") ? "Local" : "Cloud"} · {state.engine.replace(" (local)", "")}
-                  </span>
-                )
               )}
               <span className="rounded-lg border border-ink-600 bg-ink-800/70 px-2.5 py-1 font-mono text-[11px] text-ink-300">
                 {question ? `${question.index + 1}/${question.total}` : `${state.total}/${state.total}`}

@@ -10,6 +10,7 @@ import {
   type User,
 } from "./lib/api";
 import { AmbientGlow } from "./components/Brand";
+import { AdminConsole } from "./components/AdminConsole";
 import { AuthFlow } from "./components/AuthFlow";
 import { Chat } from "./components/Chat";
 import { PasswordChange } from "./components/PasswordChange";
@@ -19,7 +20,7 @@ import { TopNav } from "./components/TopNav";
 /** Mirrors the server-side idle timeout so the UI warns before the API refuses. */
 const IDLE_LIMIT_SECONDS = 15 * 60;
 
-type View = "booting" | "auth" | "password" | "picker" | "chat";
+type View = "booting" | "auth" | "password" | "picker" | "chat" | "admin";
 
 export default function App() {
   const [view, setView] = useState<View>("booting");
@@ -158,13 +159,30 @@ export default function App() {
         />
       )}
 
-      {(view === "picker" || view === "chat") && user && (
+      {(view === "picker" || view === "chat" || view === "admin") && user && (
         <>
-          <TopNav user={user} idleSeconds={idleLeft} onLogout={() => logout("user")} />
+          <TopNav
+            user={user}
+            idleSeconds={idleLeft}
+            onLogout={() => logout("user")}
+            onOpenAdmin={user.role === "admin" ? () => setView("admin") : undefined}
+          />
           <main className="pt-4">
             {/* Enter-only for the same reason as the auth steps: a suspended
                 rAF clock must never be able to hide the main view. */}
-            {view === "picker" ? (
+            {view === "admin" ? (
+              <motion.div
+                key="admin"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <AdminConsole
+                  onError={notify}
+                  onClose={() => setView(detail ? "chat" : "picker")}
+                />
+              </motion.div>
+            ) : view === "picker" ? (
               <motion.div
                 key="picker"
                 initial={{ opacity: 0, y: 12 }}

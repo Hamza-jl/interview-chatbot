@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     CONSULTING_ORG: str = "l'equipe PCA"
     DOC_REFERENCE_PREFIX: str = "EDL"  # document reference: EDL-<code>-V1.0
 
+    # One login per entity: the seed builds <code>@<domain> for each structure,
+    # so a correspondent can only ever open their own. Set it to the client's
+    # real mail domain if those addresses must receive mail.
+    PARTICIPANT_EMAIL_DOMAIN: str = "entites.local"
+
     # Domain separator for every AAD and token issuer. Changing it on a live
     # deployment makes existing ciphertexts unreadable - pin the original value
     # in .env when upgrading rather than accepting a new default.

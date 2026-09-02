@@ -19,6 +19,11 @@ backend/**/*.db-shm
 backend/**/*.db-wal
 backend/exports/
 
+# Monté depuis l'hôte en production : journaux de conversation EN CLAIR et,
+# le temps d'une distribution, le CSV des mots de passe provisoires.
+deploy/transcripts/*
+!deploy/transcripts/.gitkeep
+
 # ---- python ----------------------------------------------------------------
 __pycache__/
 *.py[cod]

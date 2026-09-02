@@ -7,10 +7,13 @@ export function TopNav({
   user,
   idleSeconds,
   onLogout,
+  onOpenAdmin,
 }: {
   user: User;
   idleSeconds: number;
   onLogout: () => void;
+  /** Provided only for administrators; the entry is absent for everyone else. */
+  onOpenAdmin?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -105,6 +108,26 @@ export function TopNav({
                     )}
                   </div>
                 </div>
+                {onOpenAdmin && (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      onOpenAdmin();
+                    }}
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 border-b border-ink-600/60 px-4 py-3 text-left text-sm text-ink-200 transition hover:bg-poppy-500/10 hover:text-poppy-500"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M4 19V6m5 13V10m5 9V4m5 15v-7"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    Suivi de la collecte
+                  </button>
+                )}
                 <button
                   onClick={onLogout}
                   role="menuitem"

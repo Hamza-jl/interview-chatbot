@@ -1,8 +1,14 @@
-# Deployment topology.
+# Déploiement complet sur une machine unique (un portable qui fait serveur).
 #
-# Secrets are read from the environment (or a secrets manager), never baked into
-# an image. Copy backend/.env.example to .env at the repository root, fill it in,
-# and keep it out of version control.
+#   docker compose up -d --build
+#
+# Quatre services : la base, l'inférence locale, l'API, et nginx qui sert le
+# front et relaie /api. Seul nginx publie un port ; le reste ne communique que
+# sur le réseau interne.
+#
+# Les secrets viennent de deploy/.env - jamais de l'image. Voir deploy/DEPLOY.md.
+name: etat-des-lieux
+
 services:
   db:
     image: postgres:16-alpine
@@ -10,7 +16,7 @@ services:
     environment:
       POSTGRES_DB: pca
       POSTGRES_USER: pca
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est obligatoire}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +24,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Reachable only from the application network.
+    networks: [internal]
+
+  # Le moteur d'analyse tourne ici : rien de ce que saisit un correspondant ne
+  # sort de la machine. C'est la raison d'être du déploiement local.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [internal]
+
+  # Télécharge le modèle au premier démarrage, puis s'arrête. Sans lui, la
+  # première question d'entretien attendrait 2 Go de téléchargement.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "ollama pull ${OLLAMA_MODEL:-qwen2.5:3b} && echo 'modèle prêt'"
+    restart: "no"
     networks: [internal]
 
   api:
@@ -27,24 +62,49 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     environment:
       ENV: prod
       DATABASE_URL: postgresql+psycopg://pca:${POSTGRES_PASSWORD}@db:5432/pca
-      MASTER_KEK: ${MASTER_KEK:?MASTER_KEK is required}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      DOWNLOAD_SIGNING_KEY: ${DOWNLOAD_SIGNING_KEY:?DOWNLOAD_SIGNING_KEY is required}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-claude-opus-5}
-      CORS_ORIGINS: ${CORS_ORIGINS:?set this to the real portal origin}
-      COOKIE_SECURE: "true"
+
+      MASTER_KEK: ${MASTER_KEK:?MASTER_KEK est obligatoire}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET est obligatoire}
+      DOWNLOAD_SIGNING_KEY: ${DOWNLOAD_SIGNING_KEY:?DOWNLOAD_SIGNING_KEY est obligatoire}
+      # Changer ce séparateur rend illisibles les réponses déjà chiffrées.
+      CRYPTO_NAMESPACE: ${CRYPTO_NAMESPACE:-interview-collect}
+
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-180}
+
+      CORS_ORIGINS: ${CORS_ORIGINS:?indiquez l'origine réelle du portail}
+      # En HTTP simple sur un réseau local, un cookie Secure n'est jamais
+      # renvoyé par le navigateur et la session ne tient pas. Voir DEPLOY.md.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
-      CONTACT_NAME: ${CONTACT_NAME:-Devoteam Tunisie - Practice Risk & Continuity}
+
+      CLIENT_NAME: ${CLIENT_NAME:-votre organisation}
+      PROGRAMME_LABEL: ${PROGRAMME_LABEL:-}
+      CONSULTING_ORG: ${CONSULTING_ORG:-l'equipe PCA}
+      DOC_REFERENCE_PREFIX: ${DOC_REFERENCE_PREFIX:-EDL}
+      PARTICIPANT_EMAIL_DOMAIN: ${PARTICIPANT_EMAIL_DOMAIN:-entites.local}
+      CONTACT_NAME: ${CONTACT_NAME:-Équipe PCA}
       CONTACT_EMAIL: ${CONTACT_EMAIL:-pca@example.com}
-      CONTACT_PHONE: ${CONTACT_PHONE:-+216 71 000 000}
+      CONTACT_PHONE: ${CONTACT_PHONE:-}
+
+      TRANSCRIPT_ENABLED: ${TRANSCRIPT_ENABLED:-false}
+      TRANSCRIPT_DIR: /srv/var/transcripts
     volumes:
-      - exports:/srv/var
+      # Exports chiffrés et base SQLite éventuelle.
+      - appdata:/srv/var
+      # Les journaux de conversation sont en clair : montés à part, pour être
+      # lisibles depuis l'hôte sans ouvrir le reste du volume.
+      - ./deploy/transcripts:/srv/var/transcripts
     networks: [internal]
-    # No published port: nginx is the only way in.
+    # Aucun port publié : nginx est la seule porte d'entrée.
 
   web:
     build: ./frontend
@@ -56,7 +116,8 @@ services:
 
 volumes:
   pgdata:
-  exports:
+  appdata:
+  ollama:
 
 networks:
   internal:
