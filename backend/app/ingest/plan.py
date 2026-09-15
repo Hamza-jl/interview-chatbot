@@ -62,7 +62,12 @@ def _target(slot: Slot) -> Target:
 def to_question(slot: Slot, prompt: str, help_text: str, example: str) -> Question:
     return Question(
         id=slot.id,
-        kind="grid" if slot.kind == "grid" else "open",
+        # "field", not "open": a discovered blank is a cell in a table, exactly
+        # like a cell of the prepared templates, and the extraction prompt only
+        # tells the model to copy an answer verbatim for "field". Called "open",
+        # "42 collaborateurs" came back as "nettoye pour 42 collaborateurs" and
+        # that is what was written into the client's document.
+        kind="grid" if slot.kind == "grid" else "field",
         section=slot.section or "Document",
         label=slot.label,
         prompt=prompt,

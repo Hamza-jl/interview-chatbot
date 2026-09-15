@@ -217,3 +217,22 @@ def test_deleting_a_document_takes_its_questions_with_it(client, headers, tmp_pa
     assert client.delete(f"{API}/documents/{body['id']}", headers=headers).status_code == 204
     assert not ingest_plan.is_registered(body["id"])
     assert client.get(f"{API}/documents/{body['id']}", headers=headers).status_code == 404
+
+
+def test_a_discovered_blank_is_a_cell_not_a_free_answer(client, headers, tmp_path):
+    """The extraction prompt only says "copy it verbatim" for a field.
+
+    Mapped to "open", the model reformulates: "42 collaborateurs" came back as
+    "nettoye pour 42 collaborateurs", and that is what was written into the
+    client's own document.
+    """
+    body = _upload(client, headers, _questionnaire(tmp_path))
+    client.post(f"{API}/documents/{body['id']}/questions", headers=headers)
+    detail = client.post(f"{API}/documents/{body['id']}/session", headers=headers).json()
+
+    kinds = {q["question_id"]: q["kind"] for q in
+             client.get(f"{API}/sessions/{detail['state']['id']}/answers",
+                        headers=headers).json()}
+
+    assert "open" not in kinds.values(), kinds
+    assert sorted(set(kinds.values())) == ["field", "grid"]

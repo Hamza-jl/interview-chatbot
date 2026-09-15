@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api, download, type Contact, type ExportResult, type SessionState, type User } from "../lib/api";
+import {
+  api,
+  documentIdOf,
+  download,
+  type Contact,
+  type ExportResult,
+  type SessionState,
+  type User,
+} from "../lib/api";
 import { Logo } from "./Brand";
 import { Spinner } from "./AuthFlow";
 
@@ -42,6 +50,9 @@ export function ThankYou({
   }
 
   const firstName = user.full_name.split(/\s+/)[0];
+  // An uploaded file is not an etat des lieux and does not feed the programme:
+  // saying so would be a promise nobody made.
+  const fromDocument = documentIdOf(state.template_kind) !== null;
   // The points themselves, not the sections holding them: "4. Contraintes
   // operationnelles" says nothing about which of its questions is empty.
   const blank = state.missing;
@@ -87,13 +98,25 @@ export function ThankYou({
             Merci {firstName} !
           </h2>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-300">
-            L&apos;état des lieux de l&apos;entité{" "}
-            <strong className="text-ink-100">{state.structure.name}</strong>{" "}
-            {blank.length === 0 ? "est finalisé" : "est enregistré"}. Votre contribution alimente
-            directement les deux projets SDSI et SMCA de MANSA Bank. Nous vous remercions du
-            temps et de l&apos;attention que vous y avez consacrés. Notre équipe analysera les
-            données collectées et reviendra vers vous pour d&apos;éventuels compléments
-            d&apos;informations.
+            {fromDocument ? (
+              <>
+                Votre document{" "}
+                <strong className="text-ink-100">{state.structure.name}</strong>{" "}
+                {blank.length === 0 ? "est complété" : "est enregistré"}. Vos réponses y ont été
+                inscrites à leur emplacement d&apos;origine, sans toucher à sa mise en forme.
+                Téléchargez-le ci-dessous.
+              </>
+            ) : (
+              <>
+                L&apos;état des lieux de l&apos;entité{" "}
+                <strong className="text-ink-100">{state.structure.name}</strong>{" "}
+                {blank.length === 0 ? "est finalisé" : "est enregistré"}. Votre contribution
+                alimente directement les deux projets SDSI et SMCA de MANSA Bank. Nous vous
+                remercions du temps et de l&apos;attention que vous y avez consacrés. Notre
+                équipe analysera les données collectées et reviendra vers vous pour
+                d&apos;éventuels compléments d&apos;informations.
+              </>
+            )}
           </p>
 
           <div className="mt-6 grid grid-cols-3 gap-2">
@@ -185,7 +208,7 @@ export function ThankYou({
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
             <button onClick={onExit} className="btn-ghost flex-1">
-              Documenter une autre structure
+              {fromDocument ? "Importer un autre document" : "Documenter une autre structure"}
             </button>
             <button onClick={onClose} className="btn-ghost flex-1">
               Fermer

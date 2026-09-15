@@ -38,9 +38,9 @@ GRID_SCHEMA: Dict[str, Any] = {
     "properties": {
         "question": {"type": "string"},
         "aide": {"type": "string"},
-        "cellules": {"type": "array", "items": {"type": "string"}},
+        "valeurs": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["question", "aide", "cellules"],
+    "required": ["question", "aide", "valeurs"],
 }
 
 CELL_SCHEMA: Dict[str, Any] = {
@@ -61,14 +61,30 @@ def schema_for(slot: Slot) -> Dict[str, Any]:
     return GRID_SCHEMA if slot.kind == "grid" else CELL_SCHEMA
 
 
+_ROWISH = re.compile(r"\s*[|/]\s*")
+
+
 def example_row(slot: Slot, cells: List[str]) -> str:
     """Join model-written cells onto the document's own columns.
 
     Padded and truncated to the column count, so the result always parses even
     when the model returns the wrong number of values.
+
+    One value per column is what is asked for, but a model will sometimes send
+    a list of whole *rows* instead - "Processus 1 / Critique / 24 h" as a single
+    value, three times over. Joining those verbatim shows the interviewee three
+    example rows where the question asked for one, so a value that is itself a
+    complete row is unpacked back into its columns.
     """
     width = len(slot.columns)
-    values = [(c or "").strip().replace("|", "/") for c in cells][:width]
+    values = [(c or "").strip() for c in cells if (c or "").strip()]
+
+    if width > 1 and values:
+        parts = _ROWISH.split(values[0])
+        if len(parts) == width:
+            values = parts
+
+    values = [v.replace("|", "/") for v in values][:width]
     while len(values) < width:
         values.append(f"<{slot.columns[len(values)]}>")
     return " | ".join(values)
@@ -79,14 +95,60 @@ SYSTEM = (
     "\n"
     "REGLES\n"
     "- Une seule question, en francais, vouvoiement, claire et courte.\n"
+    "- UN SEUL point d'interrogation. Jamais deux questions collees.\n"
+    "- La question n'emploie que les mots du champ, des colonnes et de la section.\n"
+    "  Tu n'inventes AUCUN exemple concret dans la question : ni nom de processus,\n"
+    "  ni nom d'application, ni chiffre. Les exemples vont uniquement dans\n"
+    "  'exemple' ou 'valeurs'.\n"
+    "- La personne interrogee ne voit pas le document. La question ne parle JAMAIS\n"
+    "  de cellule, de champ, de colonne, de ligne ni de tableau : elle demande\n"
+    "  l'information elle-meme.\n"
     "- Tu ne demandes que ce que le champ contient. Tu n'inventes pas de sous-questions.\n"
     "- 'aide' : une phrase qui precise ce qui est attendu.\n"
     "- 'exemple' : une reponse plausible et concrete, pas une consigne.\n"
-    "- Pour un tableau : la question demande UNE LIGNE PAR ENTREE, et 'cellules'\n"
-    "  contient UNE VALEUR PAR COLONNE, dans l'ordre exact des colonnes donnees.\n"
-    "  Autant de valeurs que de colonnes, ni plus ni moins.\n"
+    "- Pour un tableau : la question demande LA LISTE, une ligne par entree, et\n"
+    "  'valeurs' contient UNE SEULE ligne d'exemple : une valeur par colonne, dans\n"
+    "  l'ordre exact des colonnes donnees. Autant de valeurs que de colonnes, ni\n"
+    "  plus ni moins, et jamais une ligne entiere dans une seule valeur.\n"
     "- Jamais de texte hors du JSON."
 )
+
+# A question longer than this has stopped being a question and started being a
+# paragraph; the interview shows it as the chatbot's own turn.
+_MAX_QUESTION = 220
+
+# Keys of the response schema. An answer that is one of these is the model
+# repeating the question back, never an example.
+_SCHEMA_WORDS = {"valeurs", "cellules", "exemple", "question", "aide", "...", "valeur"}
+
+
+# Words that describe the document rather than ask for the information. The
+# interviewee is in a conversation and has never seen the file, so "la valeur du
+# champ 'Site principal'" and "la cellule de la colonne 'Suppleant'" are asking
+# them about a spreadsheet they cannot see. Small models produce these by
+# echoing the vocabulary of their own instructions.
+_PLUMBING = re.compile(
+    r"\b(?:cellules?|colonnes?|lignes?|tableaux?|champs?|"
+    r"document|formulaire|section)\b",
+    re.IGNORECASE,
+)
+
+
+def acceptable(question: str) -> bool:
+    """Reject the phrasings that are worse than no model at all.
+
+    Three failures, all observed on qwen2.5:3b against a real questionnaire:
+    two questions welded together (which is also how an invented subject
+    arrives - "la criticite du processus de gestion des retours d'articles ?",
+    a process named nowhere in the document); a question that has grown into a
+    paragraph; and a question that describes the file instead of asking for the
+    information. The deterministic phrasing beats all three, so the check only
+    has to be cheap and certain, not clever.
+    """
+    text = (question or "").strip()
+    if not text or len(text) > _MAX_QUESTION or text.count("?") > 1:
+        return False
+    return not _PLUMBING.search(text)
 
 
 @dataclass
@@ -106,15 +168,21 @@ def prompt_for(slot: Slot) -> str:
     lines.append(f"Champ : {slot.label}")
     if slot.kind == "grid":
         lines.append("Type : tableau, plusieurs lignes possibles")
+        lines.append("La question demande LA LISTE des entrees, au pluriel.")
         lines.append(f"Colonnes ({len(slot.columns)}) : {' | '.join(slot.columns)}")
     else:
-        lines.append("Type : reponse unique")
+        # Spelled out because a small model otherwise pluralises a single blank
+        # ("Quels sont les noms de l'entite ?"), which invites three answers
+        # into a box that holds one. Deliberately phrased without the words
+        # "cellule" or "champ": it repeats back whatever vocabulary it is given.
+        lines.append("Type : UNE SEULE information attendue.")
+        lines.append("La question est au SINGULIER et n'appelle qu'une reponse.")
     if slot.existing:
         lines.append(f"Indication presente dans le document : {slot.existing[:200]}")
     lines.append("")
     if slot.kind == "grid":
         lines.append(
-            'Reponds en JSON : {"question": "...", "aide": "...", "cellules": '
+            'Reponds en JSON : {"question": "...", "aide": "...", "valeurs": '
             f'[{", ".join(chr(34) + "..." + chr(34) for _ in slot.columns)}]}}'
         )
     else:
@@ -170,8 +238,12 @@ def parse(raw: str) -> Optional[Dict[str, str]]:
     out: Dict[str, Any] = {
         k: str(data.get(k, "") or "").strip() for k in ("question", "aide", "exemple")
     }
-    cells = data.get("cellules")
-    out["cellules"] = [str(c) for c in cells] if isinstance(cells, list) else []
+    # "cellules" was the field's first name and models still reach for it, so
+    # both are read and only one is handed on.
+    cells = data.get("valeurs")
+    if not isinstance(cells, list):
+        cells = data.get("cellules")
+    out["valeurs"] = [str(c) for c in cells] if isinstance(cells, list) else []
     return out if out["question"] else None
 
 
@@ -192,26 +264,46 @@ def generate(slot: Slot, backend=None) -> GeneratedQuestion:
         return fallback(slot)
 
     started = time.perf_counter()
-    try:
-        data = backend.structured(
-            system=SYSTEM,
-            messages=[{"role": "user", "content": prompt_for(slot)}],
-            schema=schema_for(slot),
-            max_tokens=400,
-        )
-    except Exception as exc:                                   # noqa: BLE001
-        logger.warning("question generation failed for %s: %s", slot.id, exc)
-        return fallback(slot)
+    data: Dict[str, Any] = {}
+    question = ""
 
-    question = str(data.get("question") or "").strip()
+    # Two attempts, then the deterministic phrasing. One retry is worth the
+    # seconds because the failures are sporadic rather than systematic - the
+    # same slot usually comes back clean - and an unusable question would
+    # otherwise be read out to a person.
+    for attempt in range(2):
+        try:
+            data = backend.structured(
+                system=SYSTEM,
+                messages=[{"role": "user", "content": prompt_for(slot)}],
+                schema=schema_for(slot),
+                max_tokens=400,
+            )
+        except Exception as exc:                               # noqa: BLE001
+            logger.warning("question generation failed for %s: %s", slot.id, exc)
+            return fallback(slot)
+
+        question = str(data.get("question") or "").strip()
+        if acceptable(question):
+            break
+        logger.info("rejected phrasing for %s (try %s): %r", slot.id, attempt + 1, question)
+        question = ""
+
     if not question:
         return fallback(slot)
 
     if slot.kind == "grid":
-        cells = data.get("cellules")
+        cells = data.get("valeurs")
+        if not isinstance(cells, list):
+            cells = data.get("cellules")
         example = example_row(slot, cells if isinstance(cells, list) else [])
     else:
         example = str(data.get("exemple") or "").strip()
+        # Seen in practice: the model echoes a key from the schema instead of
+        # writing an example. Shown to the interviewee as "ex. cellules", which
+        # is worse than showing nothing.
+        if example.lower() in _SCHEMA_WORDS:
+            example = ""
 
     return GeneratedQuestion(
         question=question,

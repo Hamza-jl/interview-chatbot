@@ -52,7 +52,9 @@ def _iter_blocks(document: Document):
 
 def _heading_level(paragraph: Paragraph) -> Optional[int]:
     style = (paragraph.style.name or "").lower()
-    if style.startswith("heading") or style.startswith("titre"):
+    # "Heading 1" / "Titre 1" for sections, and the document's own "Title" /
+    # "Titre" style, which is what carries the name of the questionnaire.
+    if style.startswith(("heading", "titre", "title")):
         digits = "".join(c for c in style if c.isdigit())
         return int(digits) if digits else 1
     # Many real templates never use heading styles; a short bold line that opens

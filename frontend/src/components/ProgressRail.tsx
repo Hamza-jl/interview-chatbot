@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import type { AnswerRow, SessionState } from "../lib/api";
+import { documentIdOf, type AnswerRow, type SessionState } from "../lib/api";
 
 /**
  * Progress rail, and the way back into any answer already given.
@@ -18,6 +18,7 @@ type Props = {
 
 export function ProgressRail({ state, answers, onEdit }: Props) {
   const [open, setOpen] = useState<string | null>(null);
+  const fromDocument = documentIdOf(state.template_kind) !== null;
   const bySection = new Map<string, AnswerRow[]>();
   for (const answer of answers) {
     const list = bySection.get(answer.section) ?? [];
@@ -29,19 +30,24 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-5 pb-4 pt-5">
         <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-400">
-          Entité documentée
+          {fromDocument ? "Document importé" : "Entité documentée"}
         </div>
         <div className="mt-2 break-words font-display text-[15px] font-semibold leading-snug text-ink-100">
           {state.structure.name}
         </div>
-        <div className="mt-1 flex items-center gap-2">
-          <span className="rounded-md bg-ink-800 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-300">
-            {state.structure.code}
-          </span>
-          <span className="text-[11px] text-ink-400">
-            {state.template_kind === "dsi" ? "Modèle DSI" : "Modèle Entité"}
-          </span>
-        </div>
+        {/* An uploaded file has no entity code and no template - the internal
+            "DOC-xxxxxxxx" placeholder and a "Modele Entite" badge would both be
+            wrong, and the second one misleadingly so. */}
+        {!fromDocument && (
+          <div className="mt-1 flex items-center gap-2">
+            <span className="rounded-md bg-ink-800 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-300">
+              {state.structure.code}
+            </span>
+            <span className="text-[11px] text-ink-400">
+              {state.template_kind === "dsi" ? "Modèle DSI" : "Modèle Entité"}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="px-5 pb-4">

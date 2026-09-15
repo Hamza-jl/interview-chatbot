@@ -128,6 +128,15 @@ def show(plan: DocumentPlan, use_model: bool, limit: int, width: int) -> List[di
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    # A French questionnaire is full of accents and this draws box rules, but a
+    # Windows console defaults to cp1252 and raises on both. Printing the plan
+    # is the whole point of the script, so it must not die on its own output.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fichier", nargs="+", help=".docx, .xlsx, .pptx ou .pdf")
     parser.add_argument("--sans-modele", action="store_true", dest="no_model",

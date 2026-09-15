@@ -341,3 +341,88 @@ export interface Contact {
   email: string;
   phone: string;
 }
+
+/* --------------------------------------------------------------------- */
+/* Uploaded documents                                                     */
+/* --------------------------------------------------------------------- */
+export type DocumentKind = "docx" | "xlsx" | "pptx" | "pdf";
+
+export interface UploadedDocument {
+  id: string;
+  filename: string;
+  kind: DocumentKind;
+  title: string;
+  /** Blanks found in the file - the number of questions the interview will ask. */
+  slots: number;
+  /** How many of those are tables rather than single cells. */
+  grids: number;
+  size_bytes: number;
+  created_at: string;
+}
+
+/** What the reader could not do, said plainly - a hidden sheet, a flat PDF. */
+export interface UploadResult extends UploadedDocument {
+  notes: string[];
+  preview: { id: string; kind: string; label: string; section: string; columns: string[] }[];
+}
+
+export interface GeneratedQuestion {
+  id: string;
+  kind: string;
+  label: string;
+  section: string;
+  columns: string[];
+  question?: string;
+  aide?: string;
+  exemple?: string;
+}
+
+export interface DocumentDetail extends UploadedDocument {
+  notes: string[];
+  questions: GeneratedQuestion[];
+}
+
+export interface FilledDocument extends ExportResult {
+  /** Blanks that were answered, and blanks left as they were found. */
+  answers: number;
+  blanks: number;
+}
+
+/**
+ * Multipart upload.
+ *
+ * Deliberately not routed through `api()`: that one sets a JSON content type,
+ * and a multipart body needs the browser to set it itself so the boundary
+ * matches. Everything else - bearer token, CSRF echo, 401 retry - is the same.
+ */
+export async function uploadDocument(file: File): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+
+  const send = () =>
+    fetch(`${BASE}/documents`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "X-CSRF-Token": csrfCookie(),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      credentials: "same-origin",
+      body: form,
+    });
+
+  let res = await send();
+  if (res.status === 401 && accessToken !== null && (await refresh())) res = await send();
+
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const { message } = describe(res.status, payload);
+    throw new ApiError(res.status, message);
+  }
+  return (await res.json()) as UploadResult;
+}
+
+/** A session running on an uploaded file rather than one of the templates. */
+export function documentIdOf(templateKind: string): string | null {
+  return templateKind.startsWith("doc:") ? templateKind.slice(4) : null;
+}

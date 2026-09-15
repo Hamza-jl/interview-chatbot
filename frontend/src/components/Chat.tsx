@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ApiError,
   api,
+  documentIdOf,
   type ChatResponse,
   type ExportResult,
   type Message,
@@ -64,7 +65,13 @@ export function Chat({ detail, user, onExit, onError }: Props) {
     async (sessionId: string) => {
       setFinishing(true);
       try {
-        const result = await api<ExportResult>(`/sessions/${sessionId}/export`, { method: "POST" });
+        // An interview built from an uploaded file gives that file back, not a
+        // template: same shape, different origin, so the rest is unchanged.
+        const document = documentIdOf(state.template_kind);
+        const result = await api<ExportResult>(
+          document ? `/documents/${document}/fill` : `/sessions/${sessionId}/export`,
+          { method: "POST" },
+        );
         setExported(result);
       } catch (err) {
         onError(
@@ -74,7 +81,7 @@ export function Chat({ detail, user, onExit, onError }: Props) {
         setFinishing(false);
       }
     },
-    [onError],
+    [onError, state.template_kind],
   );
 
   useEffect(() => {
@@ -227,7 +234,7 @@ export function Chat({ detail, user, onExit, onError }: Props) {
           </div>
           <div className="shrink-0 border-t border-ink-600/70 p-3">
             <button onClick={onExit} className="btn-ghost w-full !py-2 text-sm">
-              Changer de structure
+              {documentIdOf(state.template_kind) ? "Changer de document" : "Changer de structure"}
             </button>
           </div>
         </aside>

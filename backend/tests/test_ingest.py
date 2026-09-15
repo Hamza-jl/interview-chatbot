@@ -239,7 +239,7 @@ def test_the_parser_tolerates_prose_around_the_json():
         'Voici :\n```json\n{"question": "Quel domaine ?", "aide": "a", "cellules": ["x"]}\n```'
     )
     assert parsed and parsed["question"] == "Quel domaine ?"
-    assert parsed["cellules"] == ["x"]
+    assert parsed["valeurs"] == ["x"]
 
 
 def test_an_answer_with_no_question_is_rejected():
@@ -434,7 +434,9 @@ def test_a_discovered_document_registers_as_a_plan(tmp_path):
         assert get_plan(kind) == built
         assert len(sections(kind)) == 2, "the rail groups by the document's headings"
 
-        cell = next(q for q in get_plan(kind) if q.kind == "open")
+        # "field", like a cell of the prepared templates: the extraction prompt
+        # only tells the model to copy an answer verbatim for that kind.
+        cell = next(q for q in get_plan(kind) if q.kind == "field")
         assert cell.target.mode == "cell"
         table = next(q for q in get_plan(kind) if q.kind == "grid")
         assert table.target.mode == "rows"
@@ -467,3 +469,116 @@ def test_forgetting_a_document_removes_its_plan():
     assert ingest_plan.is_registered("test3")
     ingest_plan.forget("test3")
     assert not ingest_plan.is_registered("test3")
+
+
+def test_the_document_title_is_the_title_not_the_first_section(tmp_path):
+    """Word's own Title style is spelled "Title" in English, "Titre" in French.
+
+    Missing it means the document gets named after its first section heading,
+    which is what the uploader then sees in their list of documents.
+    """
+    document = Document()
+    document.add_heading("Fiche de recensement PCA", level=0)
+    document.add_heading("1. Identification", level=1)
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "Nom de l'entité"
+    path = tmp_path / "titled.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+
+    assert plan.title == "Fiche de recensement PCA"
+    # ... and the section trail still points at the section, not the title.
+    assert plan.cells[0].section == "1. Identification"
+
+
+# --------------------------------------------------------------------------- #
+# Rejecting a bad phrasing
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "   ",
+        # The real failure, observed on qwen2.5:3b against a "Processus |
+        # Criticite | Delai" table: two questions welded together, about a
+        # process that appears nowhere in the document.
+        "Quelle est la criticite du processus de gestion des retours d'articles "
+        "dans votre entreprise ? Quel est le delai maximal d'interruption ?",
+        "Pouvez-vous " + "detailler " * 40 + "?",
+    ],
+)
+def test_a_bad_phrasing_is_rejected(text):
+    assert not questions.acceptable(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Quel est le nom du responsable de l'entite ?",
+        "Pouvez-vous lister les processus metier critiques ?",
+        "Combien de collaborateurs l'entite compte-t-elle ?",
+    ],
+)
+def test_a_good_phrasing_is_kept(text):
+    assert questions.acceptable(text)
+
+
+def test_a_rejected_phrasing_falls_back_rather_than_being_asked():
+    """Two bad generations must not reach the interviewee."""
+
+    class Stubborn:
+        label = "stub"
+
+        def structured(self, **_):
+            return {"question": "Une question ? Et une deuxieme ?", "aide": "", "exemple": ""}
+
+    slot = Slot(id="s1", kind="cell", label="Effectif", target={}, context=["1. Identite"])
+    generated = questions.generate(slot, Stubborn())
+
+    assert generated.engine == "deterministe"
+    assert "Effectif" in generated.question
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Asking a person about a file they have never seen.
+        "Quelle est la valeur du champ 'Site principal' ?",
+        "Quel est le suppleant mentionne dans la cellule de la colonne 'Suppleant' ?",
+        "Que faut-il inscrire dans ce tableau ?",
+    ],
+)
+def test_a_question_about_the_document_is_rejected(text):
+    assert not questions.acceptable(text)
+
+
+def test_a_row_sent_as_one_value_is_unpacked_into_its_columns():
+    """Observed: the model answers with whole rows instead of cells."""
+    slot = Slot(
+        id="g1", kind="grid", label="Processus critiques", target={},
+        columns=["Processus", "Criticite", "Delai"],
+    )
+
+    example = questions.example_row(
+        slot,
+        ["Facturation / Critique / 24 heures",
+         "Paie / Normale / 72 heures",
+         "Recouvrement / Critique / 48 heures"],
+    )
+
+    assert example == "Facturation | Critique | 24 heures"
+
+
+def test_one_value_per_column_is_left_alone():
+    slot = Slot(id="g2", kind="grid", label="Applications", target={},
+                columns=["Application", "Editeur"])
+
+    assert questions.example_row(slot, ["Sage", "Sage SA"]) == "Sage | Sage SA"
+
+
+def test_a_short_answer_is_padded_to_the_column_count():
+    slot = Slot(id="g3", kind="grid", label="Applications", target={},
+                columns=["Application", "Editeur"])
+
+    assert questions.example_row(slot, ["Sage"]) == "Sage | <Editeur>"

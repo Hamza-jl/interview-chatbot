@@ -13,6 +13,7 @@ import { AmbientGlow } from "./components/Brand";
 import { AdminConsole } from "./components/AdminConsole";
 import { AuthFlow } from "./components/AuthFlow";
 import { Chat } from "./components/Chat";
+import { DocumentWorkshop } from "./components/DocumentWorkshop";
 import { PasswordChange } from "./components/PasswordChange";
 import { StructurePicker } from "./components/StructurePicker";
 import { TopNav } from "./components/TopNav";
@@ -20,10 +21,72 @@ import { TopNav } from "./components/TopNav";
 /** Mirrors the server-side idle timeout so the UI warns before the API refuses. */
 const IDLE_LIMIT_SECONDS = 15 * 60;
 
+/**
+ * The two ways into an interview.
+ *
+ * Kept as a switch rather than two routes because they lead to the same
+ * conversation - the only thing that differs is where the questions came from.
+ */
+function SourceTabs({
+  source,
+  onChange,
+}: {
+  source: Source;
+  onChange: (next: Source) => void;
+}) {
+  const tabs: { id: Source; label: string; hint: string }[] = [
+    { id: "structure", label: "État des lieux", hint: "Les questionnaires préparés" },
+    { id: "document", label: "Mon document", hint: "Word, Excel, PowerPoint, PDF" },
+  ];
+  return (
+    <div className="mx-auto w-full max-w-4xl px-5 pt-6">
+      <div
+        role="tablist"
+        aria-label="Origine des questions"
+        className="inline-flex gap-1 rounded-xl border border-ink-600/80 bg-ink-850/70 p-1"
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={source === tab.id}
+            // Without this the two lines are announced as one run-on string
+            // ("Mon documentWord, Excel, PowerPoint, PDF").
+            aria-label={tab.label}
+            onClick={() => onChange(tab.id)}
+            className={`rounded-lg px-4 py-2 text-left transition ${
+              source === tab.id
+                ? "bg-poppy-500 text-white shadow-glow"
+                : "text-ink-300 hover:bg-ink-800 hover:text-ink-100"
+            }`}
+          >
+            <span className="block text-sm font-medium">{tab.label}</span>
+            {/* The hint is visible rather than a title attribute: as a tooltip
+                it would also become the accessible name, so a screen reader
+                would announce the hint and never the label. */}
+            <span
+              aria-hidden="true"
+              className={`block text-[11px] ${
+                source === tab.id ? "text-white/75" : "text-ink-500"
+              }`}
+            >
+              {tab.hint}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type View = "booting" | "auth" | "password" | "picker" | "chat" | "admin";
+
+/** Where the questions come from: the prepared templates, or a file you bring. */
+type Source = "structure" | "document";
 
 export default function App() {
   const [view, setView] = useState<View>("booting");
+  const [source, setSource] = useState<Source>("structure");
   const [user, setUser] = useState<User | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -35,6 +98,11 @@ export default function App() {
   const notify = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(null), 6000);
+  }, []);
+
+  const openInterview = useCallback((session: SessionDetail) => {
+    setDetail(session);
+    setView("chat");
   }, []);
 
   const clearSession = useCallback(() => {
@@ -189,13 +257,12 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <StructurePicker
-                  onError={notify}
-                  onOpen={(session) => {
-                    setDetail(session);
-                    setView("chat");
-                  }}
-                />
+                <SourceTabs source={source} onChange={setSource} />
+                {source === "structure" ? (
+                  <StructurePicker onError={notify} onOpen={openInterview} />
+                ) : (
+                  <DocumentWorkshop onError={notify} onOpen={openInterview} />
+                )}
               </motion.div>
             ) : (
               detail && (

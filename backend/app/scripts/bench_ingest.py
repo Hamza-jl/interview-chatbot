@@ -84,7 +84,7 @@ def column_count_ok(parsed: Dict[str, Any], slot: Slot) -> Optional[bool]:
     """
     if slot.kind != "grid" or not slot.columns:
         return None
-    return len(parsed.get("cellules") or []) == len(slot.columns)
+    return len(parsed.get("valeurs") or []) == len(slot.columns)
 
 
 def call(model: str, slot: Slot, timeout: float) -> Dict[str, Any]:
