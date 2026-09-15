@@ -687,3 +687,48 @@ def test_a_glossary_is_not_reported_as_an_unfilled_form(tmp_path):
 
     assert not plan.slots
     assert not [n for n in plan.notes if "non pris en charge" in n]
+
+
+def test_an_incomplete_row_of_a_data_table_is_not_a_form_field(tmp_path):
+    """A real training plan: six columns, filled rows, one name typed alone.
+
+    A label beside an empty cell and an incomplete row of a table look the same
+    one row at a time. This sheet produced exactly one question, built from a
+    person's name, and the model dressed it up as "Quelle est l'adresse de
+    l'entreprise Eya Hosni ?" - a field, a company and an address, none of
+    which exist anywhere in the document.
+    """
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Plan"
+    headers = ["Nom et Prénom", "Besoin", "Type", "Objectif", "Compétences", "Écart"]
+    for column, name in enumerate(headers, start=1):
+        sheet.cell(row=1, column=column, value=name)
+    for row in range(2, 8):
+        for column in range(1, 7):
+            sheet.cell(row=row, column=column, value=f"valeur {row}.{column}")
+    # The stray row: a name and nothing else.
+    sheet.cell(row=8, column=1, value="Eya Hosni")
+    path = tmp_path / "plan.xlsx"
+    book.save(path)
+
+    plan = read_xlsx.read(str(path))
+
+    assert not plan.slots, [s.label for s in plan.slots]
+    assert any("déjà renseigné" in n for n in plan.notes)
+
+
+def test_a_two_column_form_still_works_beside_that(tmp_path):
+    """The guard must not cost us the shape it is meant to protect."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Fiche"
+    sheet["A1"], sheet["B1"] = "Responsable PCA", "Mme Ben Salah"
+    sheet["A2"] = "Suppléant"
+    sheet["A3"] = "Téléphone d'astreinte"
+    path = tmp_path / "form.xlsx"
+    book.save(path)
+
+    plan = read_xlsx.read(str(path))
+
+    assert [s.label for s in plan.cells] == ["Suppléant", "Téléphone d'astreinte"]

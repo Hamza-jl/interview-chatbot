@@ -72,8 +72,34 @@ def _find_header(sheet: Worksheet, width: int) -> Optional[Tuple[int, List[str]]
     return None
 
 
+def _populated_columns(sheet: Worksheet, width: int) -> int:
+    """How many columns carry anything at all."""
+    limit = min(sheet.max_row or 1, 200)
+    used = 0
+    for column in range(1, width + 1):
+        if any(
+            not is_blank(_text(sheet.cell(row=r, column=column).value))
+            for r in range(1, limit + 1)
+        ):
+            used += 1
+    return used
+
+
 def _key_value_pairs(sheet: Worksheet, width: int) -> List[Tuple[int, str]]:
-    """Rows where column A labels something and column B is waiting for it."""
+    """Rows where column A labels something and column B is waiting for it.
+
+    Only ever run on a sheet two columns wide. A label beside an empty cell and
+    an incomplete row of a data table look identical one row at a time, and the
+    difference is the shape of the sheet around them: a key/value list is two
+    columns by definition, so anything wider carrying data is a table.
+
+    A real training plan - six columns, fifty filled rows, one row where only
+    the name had been typed - otherwise produced exactly one question, built
+    from a person's name: "Quelle est l'adresse de l'entreprise Eya Hosni ?"
+    """
+    if _populated_columns(sheet, width) > 2:
+        return []
+
     pairs: List[Tuple[int, str]] = []
     limit = min(sheet.max_row or 1, 200)
     for row in range(1, limit + 1):
@@ -140,10 +166,18 @@ def read(path: str, filename: str = "") -> DocumentPlan:
                 )
             )
         if not pairs:
-            notes.append(f"Feuille « {sheet.title} » : aucun champ vide identifié.")
+            # Two different situations, and telling them apart is the whole
+            # value of the message: a sheet already carrying its data is
+            # finished, a sheet we could not make sense of is not.
+            notes.append(
+                f"Feuille « {sheet.title} » : le tableau est déjà renseigné, "
+                "rien à compléter."
+                if _populated_columns(sheet, width) > 2
+                else f"Feuille « {sheet.title} » : aucun champ vide identifié."
+            )
 
     workbook.close()
-    if not slots:
+    if not slots and not notes:
         notes.append("Aucun champ à remplir détecté dans ce classeur.")
 
     return DocumentPlan(filename=name, kind="xlsx", title=name, slots=slots, notes=notes)
