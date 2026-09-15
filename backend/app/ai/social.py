@@ -186,19 +186,44 @@ _NAVIGATION: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
+# Splits a message into the clauses people actually string together. Only used
+# to decide whether EVERY clause is navigation - never to read content.
+_CONNECTOR = re.compile(r"\s*(?:,|;|\bet\b|\bpuis\b|\bdonc\b|\balors\b)\s*")
+
+
 def classify_navigation(text: str) -> Optional[str]:
     """Navigation intent if the message is *entirely* a navigation phrase.
 
     A message carrying interview content - even a negative one - is never
     navigation, so a real answer cannot be discarded as a skip.
+
+    "Entirely" allows several navigation phrases joined by a connector. The
+    Passer button sends "Je ne dispose pas de cette information, passons a la
+    suite" - two skips in a row. Each pattern is anchored at both ends, so
+    neither half matched the whole string, the message reached the model, and
+    on a table question the engine tried to mine a row out of a refusal.
+
+    Every clause must still be navigation on its own. "Nous n'avons pas de
+    comites, passons a la suite" therefore stays an answer, because its first
+    clause carries content.
     """
     folded = _fold(text)
     if not folded or len(folded) > 70:
         return None
-    for nav, pattern in _NAVIGATION:
-        if pattern.match(folded):
-            return nav
-    return None
+
+    clauses = [part for part in _CONNECTOR.split(folded) if part]
+    if not clauses:
+        return None
+
+    found = set()
+    for clause in clauses:
+        hit = next((nav for nav, pattern in _NAVIGATION if pattern.match(clause)), None)
+        if hit is None:
+            return None
+        found.add(hit)
+    # Mixed instructions ("passer, revenir") are not actionable: let the model
+    # sort out what was meant rather than guessing at one of them.
+    return found.pop() if len(found) == 1 else None
 
 
 # --------------------------------------------------------------------------- #

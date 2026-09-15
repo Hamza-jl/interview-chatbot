@@ -481,3 +481,40 @@ def test_the_assistant_knows_who_runs_the_workshop():
         total=len(plan),
     ).reply
     assert org in reply and client in reply
+
+
+# --------------------------------------------------------------------------- #
+# The Passer button's own words
+# --------------------------------------------------------------------------- #
+def test_the_passer_button_is_read_as_a_skip():
+    """Composer sends two skip phrases joined by a comma. Each navigation
+    pattern is anchored at both ends, so neither half matched the whole string;
+    the message reached the model, and on a table question the engine tried to
+    mine a row out of a refusal."""
+    assert social.classify_navigation(
+        "Je ne dispose pas de cette information, passons a la suite."
+    ) == "suivant"
+
+
+def test_each_half_of_that_phrase_still_works_alone():
+    assert social.classify_navigation("Je ne dispose pas de cette information") == "suivant"
+    assert social.classify_navigation("passons a la suite") == "suivant"
+    assert social.classify_navigation("sans objet, passons a la suite") == "suivant"
+
+
+def test_a_negative_answer_joined_to_a_skip_is_still_an_answer():
+    """The guard that matters: every clause must be navigation on its own, so
+    content in front of a skip keeps the message an answer."""
+    assert social.classify_navigation("Nous n'avons pas de comites") is None
+    assert social.classify_navigation("Nous n'avons pas de comites, passons a la suite") is None
+    assert social.classify_navigation("Nous n'avons aucun plan de continuite") is None
+
+
+def test_a_table_row_is_never_mistaken_for_navigation():
+    assert social.classify_navigation(
+        "Credit | Octroi | Delta Credit | Instruction et deblocage | V"
+    ) is None
+
+
+def test_contradictory_instructions_are_left_to_the_model():
+    assert social.classify_navigation("passer, revenir") is None
