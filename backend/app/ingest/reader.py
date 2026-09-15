@@ -29,6 +29,10 @@ _REFUSED = {
     ".txt": "Un fichier texte n'a pas d'emplacements à remplir.",
 }
 
+# Appended to every refusal. A refusal that does not say what to send instead
+# gets the same file uploaded again.
+_ACCEPTED = "Formats acceptés : Word (.docx), Excel (.xlsx), PowerPoint (.pptx), PDF."
+
 
 class UnsupportedDocument(Exception):
     """Raised with a message meant to be shown to the person who uploaded."""
@@ -44,19 +48,16 @@ def detect(path: str, filename: str = "") -> str:
         for marker, kind in _ZIP_MARKERS:
             if marker in names:
                 return kind
-        raise UnsupportedDocument(
-            "Archive non reconnue. Attendu : Word, Excel ou PowerPoint récents."
-        )
+        raise UnsupportedDocument(f"Archive non reconnue. {_ACCEPTED}")
 
     with open(path, "rb") as handle:
         if handle.read(5) == b"%PDF-":
             return "pdf"
 
     if extension in _REFUSED:
-        raise UnsupportedDocument(_REFUSED[extension])
+        raise UnsupportedDocument(f"{_REFUSED[extension]} {_ACCEPTED}")
     raise UnsupportedDocument(
-        f"Format non pris en charge ({extension or 'sans extension'}). "
-        "Formats acceptés : .docx, .xlsx, .pptx, .pdf."
+        f"Format non pris en charge ({extension or 'sans extension'}). {_ACCEPTED}"
     )
 
 

@@ -109,7 +109,8 @@ class Structure(Base):
     code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     parent: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    template_kind: Mapped[str] = mapped_column(String(16), default="entite")  # dsi|entite
+    # dsi | entite | doc:<id> for the placeholder row an uploaded file gets.
+    template_kind: Mapped[str] = mapped_column(String(64), default="entite")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -121,7 +122,7 @@ class SurveySession(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     structure_id: Mapped[str] = mapped_column(ForeignKey("structures.id"), index=True)
-    template_kind: Mapped[str] = mapped_column(String(16))
+    template_kind: Mapped[str] = mapped_column(String(64))
 
     status: Mapped[str] = mapped_column(String(16), default="in_progress")  # in_progress|completed
     cursor: Mapped[int] = mapped_column(Integer, default=0)      # index into the question plan
@@ -132,6 +133,12 @@ class SurveySession(Base):
     started_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_activity_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Set when the interview came from an uploaded file rather than a built-in
+    # template. template_kind is then "doc:<id>", which is what get_plan reads.
+    document_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("uploaded_documents.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     structure: Mapped[Structure] = relationship(lazy="joined")
 
@@ -190,6 +197,37 @@ class Export(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     download_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class UploadedDocument(Base):
+    """A file somebody uploaded, and the questionnaire derived from it.
+
+    The original bytes are kept because the deliverable is that file with the
+    blanks filled - regenerating it would lose the client's own formatting. They
+    are sealed on disk under the session key like every other artefact, and the
+    derived plan is sealed too: question wording quotes the document's own
+    headings and labels, which are as confidential as the answers.
+    """
+
+    __tablename__ = "uploaded_documents"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(8))            # docx|xlsx|pptx|pdf
+    title: Mapped[str] = mapped_column(String(300), default="")
+
+    wrapped_dek: Mapped[str] = mapped_column(Text)
+    blob_path: Mapped[str] = mapped_column(String(500))     # the original, sealed
+    plan_enc: Mapped[str] = mapped_column(Text)             # slots + wording, sealed
+
+    slot_count: Mapped[int] = mapped_column(Integer, default=0)
+    grid_count: Mapped[int] = mapped_column(Integer, default=0)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_document_user", "user_id", "created_at"),)
 
 
 # --------------------------------------------------------------------------- #

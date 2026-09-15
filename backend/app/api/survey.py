@@ -588,6 +588,25 @@ def export_session(
     )
 
 
+_MEDIA_TYPES = {
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".pdf": "application/pdf",
+}
+
+
+def _media_type(filename: str) -> str:
+    """An uploaded document is returned in the format it arrived in.
+
+    Serving an .xlsx as Word makes Excel refuse to open its own file, so the
+    extension decides, with Word as the fallback for generated templates.
+    """
+    return _MEDIA_TYPES.get(
+        os.path.splitext(filename)[1].lower(), _MEDIA_TYPES[".docx"]
+    )
+
+
 def security_sign(export_id: str, user_id: str) -> str:
     from app.core.security import sign_download
 
@@ -635,7 +654,7 @@ def download_export(
 
     return Response(
         content=document,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        media_type=_media_type(record.filename),
         headers={
             "Content-Disposition": f'attachment; filename="{record.filename}"',
             "X-Content-Digest": f"sha256={record.sha256}",

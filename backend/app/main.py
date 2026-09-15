@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, auth, chat, survey
+from app.api import admin, auth, chat, documents, survey
 from app.core.config import settings
 from app.core.middleware import (
     BodyLimitMiddleware,
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(survey.router, prefix=api)
     app.include_router(chat.router, prefix=api)
     app.include_router(admin.router, prefix=api)
+    app.include_router(documents.router, prefix=api)
 
     @app.get("/health", tags=["ops"])
     def health():

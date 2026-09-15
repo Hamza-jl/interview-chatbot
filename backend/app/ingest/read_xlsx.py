@@ -17,6 +17,7 @@ full of data and would otherwise read as a filled form.
 """
 from __future__ import annotations
 
+import io
 from typing import List, Optional, Tuple
 
 from openpyxl import load_workbook
@@ -89,7 +90,11 @@ def _key_value_pairs(sheet: Worksheet, width: int) -> List[Tuple[int, str]]:
 
 
 def read(path: str, filename: str = "") -> DocumentPlan:
-    workbook = load_workbook(path, data_only=True)
+    # Read into memory first: openpyxl decides what a file is from its
+    # extension, and an upload is staged under a name it chose itself. The
+    # format was already settled by `reader.detect`, from the bytes.
+    with open(path, "rb") as handle:
+        workbook = load_workbook(io.BytesIO(handle.read()), data_only=True)
     name = filename or path.rsplit("/", 1)[-1]
     slots: List[Slot] = []
     notes: List[str] = []
