@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     # it on is a deliberate trade of confidentiality for legibility - put the
     # directory somewhere the operating system protects.
     TRANSCRIPT_ENABLED: bool = False
-    TRANSCRIPT_DIR: str = "./var/transcripts"
+    TRANSCRIPT_DIR: str = "./var/interviews"
 
     # ---- LLM ----------------------------------------------------------------
     # "auto" picks Anthropic when a key is present, else a reachable Ollama,

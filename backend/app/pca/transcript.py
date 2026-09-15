@@ -1,10 +1,14 @@
-"""A readable log of each interview, one file per entity, on the local disk.
+"""A machine-readable log of each interview, one file per entity, on local disk.
 
 The database is the record of truth and keeps every answer encrypted per field.
-This is something else: a plain Markdown file an operator can open, read, grep
-and archive without the application. It exists because "what exactly did this
+This is something else: a plain JSON file an operator can open, parse and feed to
+another tool without the application. It exists because "what exactly did this
 person say?" is a question that gets asked long after the interview, and
 decrypting the database to answer it is not a workflow.
+
+JSON rather than prose: these files are meant to be reused - loaded into a
+notebook, diffed, aggregated across entities - so the structure is stable and
+the timestamps are ISO 8601 UTC rather than something pleasant to read.
 
 Two consequences follow, and both are deliberate:
 
@@ -23,6 +27,7 @@ committed by the time we run, so every error is logged and swallowed.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import os
 import re
@@ -39,6 +44,11 @@ from app.pca.blueprint import Question, get_plan
 
 logger = logging.getLogger("pca.transcript")
 
+# Bumped when the shape below changes in a way a consumer would notice, so a
+# script that reads these files can refuse a version it does not understand.
+SCHEMA = "etat-des-lieux/interview"
+SCHEMA_VERSION = 1
+
 _UNSAFE = re.compile(r"[^A-Za-z0-9]+")
 
 _ROLE = {"user": "Participant", "assistant": "Argus"}
@@ -52,49 +62,50 @@ def _slug(text: str) -> str:
 
 
 def filename_for(survey: SurveySession) -> str:
-    """`Audit_Comptable_et_Financier_ACF.md` - the entity leads, so the
-    directory sorts by the thing an operator is actually looking for."""
-    return f"{_slug(survey.structure.name)}_{_slug(survey.structure.code)}.md"
+    """`Audit_Comptable_et_Financier_ACF_1b1554d6.json`.
+
+    The entity leads, so the directory sorts by the thing an operator is
+    actually looking for. The session id follows because an entity holds more
+    than one interview more often than it looks - a correspondent changes, an
+    account is retired and its sessions stay behind - and keying on the entity
+    alone lets a later interview silently overwrite a finished one.
+    """
+    return (
+        f"{_slug(survey.structure.name)}_{_slug(survey.structure.code)}"
+        f"_{str(survey.id)[:8]}.json"
+    )
 
 
 def path_for(survey: SurveySession) -> str:
     return os.path.join(settings.TRANSCRIPT_DIR, filename_for(survey))
 
 
-def _local(moment: Optional[dt.datetime]) -> str:
+def _iso(moment: Optional[dt.datetime]) -> Optional[str]:
+    """ISO 8601 in UTC, or null. Naive values are stored UTC, so say so."""
     if moment is None:
-        return "—"
+        return None
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=dt.timezone.utc)
-    return moment.astimezone().strftime("%d/%m/%Y %H:%M")
+    return moment.astimezone(dt.timezone.utc).isoformat()
 
 
-def _render_answer(question: Question, payload: Dict[str, Any]) -> List[str]:
-    """Grids become Markdown tables; everything else is quoted verbatim."""
+def _answer_payload(question: Question, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The stored answer, shaped by question kind.
+
+    Grids keep their raw row dicts - the storage keys are what a consumer joins
+    on - and carry the column definitions alongside, so a reader can label them
+    without loading the questionnaire blueprint.
+    """
     if question.kind == "grid":
-        rows = payload.get("rows") or []
-        if not rows:
-            return ["_(vide)_"]
-        # The template's own column headings, not the storage keys: this file is
-        # read next to the .docx, and "macro_activite" matches nothing in it.
-        keys = [c.id for c in question.columns] or list(rows[0].keys())
-        labels = {c.id: c.label for c in question.columns}
-        header = "| " + " | ".join(labels.get(k, k) for k in keys) + " |"
-        rule = "| " + " | ".join("---" for _ in keys) + " |"
-        body = [
-            "| " + " | ".join(str(row.get(k, "")).replace("|", r"\|") or " " for k in keys) + " |"
-            for row in rows
-        ]
-        return [header, rule, *body]
-
-    value = (payload.get("value") or "").strip()
-    if not value:
-        return ["_(vide)_"]
-    return [f"> {line}" if line.strip() else ">" for line in value.splitlines()]
+        return {
+            "columns": [{"id": c.id, "label": c.label} for c in question.columns],
+            "rows": payload.get("rows") or [],
+        }
+    return {"value": (payload.get("value") or "").strip() or None}
 
 
-def render(db: Session, survey: SurveySession, dek: bytes) -> str:
-    """The whole session as Markdown: header, transcript, then the answers."""
+def build(db: Session, survey: SurveySession, dek: bytes) -> Dict[str, Any]:
+    """The whole session as a plain dict: header, conversation, then answers."""
     plan = get_plan(survey.template_kind)
     stored = {
         a.question_id: a
@@ -106,81 +117,89 @@ def render(db: Session, survey: SurveySession, dek: bytes) -> str:
     }
     participant = db.get(User, survey.user_id)
 
-    out: List[str] = [
-        f"# État des lieux — {survey.structure.name}",
-        "",
-        f"- **Entité** : {survey.structure.name} (`{survey.structure.code}`)",
-    ]
-    if survey.structure.parent:
-        out.append(f"- **Rattachement** : {survey.structure.parent}")
-    out += [
-        f"- **Modèle** : {'DSI' if survey.template_kind == 'dsi' else 'Entité'}",
-        f"- **Participant** : "
-        + (f"{participant.full_name} <{participant.email}>" if participant else "—"),
-        f"- **Ouvert le** : {_local(survey.started_at)}",
-        f"- **Dernière activité** : {_local(survey.last_activity_at)}",
-        f"- **Statut** : "
-        + ("clôturé le " + _local(survey.completed_at) if survey.status == "completed"
-           else "en cours"),
-        f"- **Avancement** : {len(filled)} / {len(plan)} points renseignés",
-        f"- **Session** : `{survey.id}`",
-        "",
-        "> Journal généré automatiquement après chaque échange. Le document Word",
-        "> reste le livrable ; ce fichier est une trace de lecture.",
-        "",
-        "---",
-        "",
-        "## Conversation",
-        "",
-    ]
-
     messages = list(
         db.execute(
             select(ChatMessage).where(ChatMessage.session_id == survey.id).order_by(ChatMessage.seq)
         ).scalars()
     )
-    if not messages:
-        out.append("_Aucun échange._")
+
+    conversation: List[Dict[str, Any]] = []
     for row in messages:
         body = open_json(dek, survey.id, f"msg:{row.id}", row.body_enc)
-        who = _ROLE.get(row.role, row.role)
-        stamp = _local(row.created_at)
-        tag = f" · _{row.intent}_" if row.intent else ""
-        out.append(f"**{who}** — {stamp}{tag}")
-        out.append("")
-        for line in str(body).splitlines():
-            out.append(line)
-        out.append("")
+        conversation.append({
+            "seq": row.seq,
+            "role": row.role,
+            "speaker": _ROLE.get(row.role, row.role),
+            "at": _iso(row.created_at),
+            "intent": row.intent or None,
+            "text": str(body),
+        })
 
-    out += ["---", "", "## Réponses enregistrées", ""]
+    answers: List[Dict[str, Any]] = []
     for index, question in enumerate(plan, start=1):
         row = stored.get(question.id)
-        out.append(f"### {index}. {question.label}")
-        out.append("")
-        out.append(f"_{question.section}_")
-        out.append("")
+        entry: Dict[str, Any] = {
+            "index": index,
+            "question_id": question.id,
+            "section": question.section,
+            "label": question.label,
+            "kind": question.kind,
+            "answered": row is not None,
+        }
         if row is None:
-            out.append("**Sans réponse.**")
+            entry.update({
+                "confirmed": False,
+                "completeness": None,
+                "revision": None,
+                "updated_at": None,
+                "answer": None,
+            })
         else:
             payload = open_json(dek, survey.id, f"answer:{question.id}", row.payload_enc) or {}
-            if not row.confirmed:
-                out.append("**Brouillon non confirmé — absent du document.**")
-                out.append("")
-            out += _render_answer(question, payload)
-            out.append("")
-            out.append(
-                f"<sub>{row.completeness} · révision {row.revision} · "
-                f"modifié le {_local(row.updated_at)}</sub>"
-            )
-        out.append("")
+            entry.update({
+                # An unconfirmed draft is absent from the Word document. It is
+                # kept here, flagged, because it is still what the person typed.
+                "confirmed": bool(row.confirmed),
+                "completeness": row.completeness,
+                "revision": row.revision,
+                "updated_at": _iso(row.updated_at),
+                "answer": _answer_payload(question, payload),
+            })
+        answers.append(entry)
 
-    blank = [q.label for q in plan if q.id not in filled]
-    if blank:
-        out += ["---", "", f"## Points sans réponse ({len(blank)})", ""]
-        out += [f"- {label}" for label in blank]
-        out.append("")
+    return {
+        "schema": SCHEMA,
+        "version": SCHEMA_VERSION,
+        "generated_at": _iso(dt.datetime.now(dt.timezone.utc)),
+        "session": {
+            "id": survey.id,
+            "status": survey.status,
+            "template_kind": survey.template_kind,
+            "started_at": _iso(survey.started_at),
+            "last_activity_at": _iso(survey.last_activity_at),
+            "completed_at": _iso(survey.completed_at),
+        },
+        "entity": {
+            "code": survey.structure.code,
+            "name": survey.structure.name,
+            "parent": survey.structure.parent or None,
+        },
+        "participant": (
+            {"full_name": participant.full_name, "email": participant.email}
+            if participant else None
+        ),
+        "progress": {"answered": len(filled), "total": len(plan)},
+        "conversation": conversation,
+        "answers": answers,
+        "unanswered": [
+            {"question_id": q.id, "label": q.label} for q in plan if q.id not in filled
+        ],
+    }
 
-    return "\n".join(out)
+
+def render(db: Session, survey: SurveySession, dek: bytes) -> str:
+    """The session as a JSON document, ready to write."""
+    return json.dumps(build(db, survey, dek), ensure_ascii=False, indent=2) + "\n"
 
 
 def save(db: Session, survey: SurveySession, dek: bytes) -> Optional[str]:

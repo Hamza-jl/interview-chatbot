@@ -44,3 +44,5 @@ Thumbs.db
 .vscode/
 *.swp
 ~$*
+deploy/interviews/*
+!deploy/interviews/.gitkeep

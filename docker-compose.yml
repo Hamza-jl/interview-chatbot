@@ -96,13 +96,16 @@ services:
       CONTACT_PHONE: ${CONTACT_PHONE:-}
 
       TRANSCRIPT_ENABLED: ${TRANSCRIPT_ENABLED:-false}
-      TRANSCRIPT_DIR: /srv/var/transcripts
+      TRANSCRIPT_DIR: /srv/var/interviews
     volumes:
       # Exports chiffrés et base SQLite éventuelle.
       - appdata:/srv/var
-      # Les journaux de conversation sont en clair : montés à part, pour être
-      # lisibles depuis l'hôte sans ouvrir le reste du volume.
+      # Le fichier d'identifiants du seed, écrit ici pour être lisible depuis
+      # l'hôte sans entrer dans un conteneur.
       - ./deploy/transcripts:/srv/var/transcripts
+      # Les journaux d'entretien (JSON) sont en clair : montés à part, pour être
+      # lisibles et réutilisables depuis l'hôte sans ouvrir le reste du volume.
+      - ./deploy/interviews:/srv/var/interviews
     networks: [internal]
     # Aucun port publié : nginx est la seule porte d'entrée.
 
