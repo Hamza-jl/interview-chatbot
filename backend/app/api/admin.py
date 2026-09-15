@@ -118,18 +118,13 @@ def progress(
     here and the progress rail can never disagree. Counts and labels only - an
     administrator never sees what was answered.
     """
-    from app.api.survey import build_state
+    from app.api.survey import build_state, interview_by_structure
 
     users = {u.id: u for u in db.execute(select(User)).scalars()}
-    sessions = list(
-        db.execute(select(SurveySession).order_by(SurveySession.last_activity_at.desc())).scalars()
-    )
-    by_structure = {s.structure_id: s for s in reversed(sessions)}
-    # A closed interview outranks an open one for the same entity, exactly as
-    # create_session decides which one counts.
-    for survey in sessions:
-        if survey.status == "completed":
-            by_structure[survey.structure_id] = survey
+    # A closed interview outranks an open one for the same entity. The rule is
+    # shared with the entity cards and with create_session, so this screen can
+    # never disagree with what a correspondent is shown.
+    by_structure = interview_by_structure(db)
 
     rows: List[Dict[str, Any]] = []
     for structure in db.execute(select(Structure).order_by(Structure.name)).scalars():

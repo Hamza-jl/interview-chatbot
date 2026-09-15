@@ -7,9 +7,12 @@ import { CompletedInterview } from "./CompletedInterview";
 export function StructurePicker({
   onOpen,
   onError,
+  isStaff = false,
 }: {
   onOpen: (detail: SessionDetail) => void;
   onError: (message: string) => void;
+  /** Staff read a finished interview instead of being shown the door. */
+  isStaff?: boolean;
 }) {
   const [structures, setStructures] = useState<Structure[] | null>(null);
   const [sessions, setSessions] = useState<SessionState[]>([]);
@@ -47,8 +50,15 @@ export function StructurePicker({
     return map;
   }, [sessions]);
 
+  const selectedStructure = useMemo(
+    () => (selected && structures ? structures.find((s) => s.id === selected) ?? null : null),
+    [selected, structures],
+  );
+  /** Our own session for this entity, when there is one - it carries the percentage. */
   const selectedSession = selected ? progressByStructure.get(selected) ?? null : null;
-  const isClosed = selectedSession?.status === "completed";
+  // The entity decides, not our own session: a colleague may have closed this
+  // interview, and we must not be offered a blank one beside theirs.
+  const isClosed = selectedStructure?.interview_status === "completed";
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -63,10 +73,13 @@ export function StructurePicker({
 
   async function start() {
     if (!selected || !structures) return;
-    // A closed interview is never restarted - the server refuses too, this
-    // just means the refusal is not what the interviewee meets first.
-    if (isClosed) {
-      setClosed(structures.find((s) => s.id === selected) ?? null);
+    // A closed interview is never restarted. Staff open it to read what was
+    // collected; a correspondent is shown the document instead. The server
+    // enforces both - this only decides which one they meet first.
+    // When it was closed by someone else we hold no state to show, so we let
+    // the request through and surface the server's own refusal.
+    if (isClosed && !isStaff && selectedSession) {
+      setClosed(selectedStructure);
       return;
     }
     setBusy(true);
@@ -138,7 +151,12 @@ export function StructurePicker({
         <div className="mt-7 grid gap-3 sm:grid-cols-2">
           <AnimatePresence mode="popLayout">
             {visible.map((structure, index) => {
-              const progress = progressByStructure.get(structure.id);
+              // The entity's own state leads; our session only supplies the
+              // percentage, and only when the running interview is ours.
+              const mine = progressByStructure.get(structure.id);
+              const done = structure.interview_status === "completed";
+              const running = structure.interview_status === "in_progress";
+              const progress = done || running ? mine ?? null : null;
               const active = selected === structure.id;
               return (
                 <motion.button
@@ -197,17 +215,15 @@ export function StructurePicker({
                     </span>
                   </div>
 
-                  {progress && (
+                  {(done || running) && (
                     <div className="mt-3 flex items-center gap-2">
                       <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink-700">
                         <div
-                          className={`h-full ${
-                            progress.status === "completed" ? "bg-accent-mint" : "bg-poppy-500"
-                          }`}
-                          style={{ width: `${progress.percent}%` }}
+                          className={`h-full ${done ? "bg-accent-mint" : "bg-poppy-500"}`}
+                          style={{ width: `${done ? 100 : progress?.percent ?? 0}%` }}
                         />
                       </div>
-                      {progress.status === "completed" ? (
+                      {done ? (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-accent-mint/40 bg-accent-mint/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent-mint">
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path
@@ -222,9 +238,18 @@ export function StructurePicker({
                         </span>
                       ) : (
                         <span className="shrink-0 text-[11px] font-medium text-ink-400">
-                          En cours · {progress.percent} %
+                          {progress ? `En cours · ${progress.percent} %` : "En cours"}
                         </span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Who signed it off. An entity is documented once, and the
+                      card should say by whom without opening anything. */}
+                  {done && structure.completed_by && (
+                    <div className="mt-1.5 truncate text-[11px] text-ink-400">
+                      Terminé par{" "}
+                      <span className="font-medium text-ink-300">{structure.completed_by}</span>
                     </div>
                   )}
                 </motion.button>
@@ -250,7 +275,9 @@ export function StructurePicker({
           {busy
             ? "Ouverture de l'entretien…"
             : isClosed
-              ? "Entretien terminé — voir le document"
+              ? isStaff
+                ? "Entretien terminé — consulter les réponses"
+                : "Entretien terminé — voir le document"
               : selectedSession
                 ? `Reprendre l'entretien · ${selectedSession.percent} %`
                 : "Démarrer l'entretien"}

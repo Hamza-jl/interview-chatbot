@@ -534,3 +534,222 @@ def test_preprinted_template_notes_survive_the_fill(client):
     cell = document.tables[7].rows[2].cells[1].text
     assert "Contrats editeurs" in cell
     assert "N.B" in cell, "the printed instruction must not be destroyed"
+
+
+# --------------------------------------------------------------------------- #
+# One interview per entity - per ENTITY, not per account
+# --------------------------------------------------------------------------- #
+def _open(client, headers, code: str) -> dict:
+    structures = client.get(f"{API}/structures", headers=headers).json()
+    target = next(s for s in structures if s["code"] == code)
+    return client.post(
+        f"{API}/sessions", headers=headers, json={"structure_id": target["id"]}
+    ).json()
+
+
+def test_a_closed_entity_is_reported_to_everyone_with_who_closed_it(client):
+    """The card describes the entity, not the reader's own session. Scoping it
+    to the caller told staff an entity was untouched while it was finished."""
+    owner = authenticate(client, "client@example.com")
+    state = _open(client, owner, "DSI")["state"]
+    finish(client, owner, state["id"])
+
+    staff = authenticate(client, "staff@example.org")
+    card = next(
+        s for s in client.get(f"{API}/structures", headers=staff).json() if s["code"] == "DSI"
+    )
+    assert card["interview_status"] == "completed"
+    assert card["completed_by"] == "client@example.com", "the card names who signed it off"
+    assert card["completed_at"] is not None
+    assert card["interview_session_id"] == state["id"]
+
+
+def test_staff_opening_a_closed_entity_get_that_interview_not_a_blank_one(client):
+    """The bug this fixes: an administrator clicking a finished entity used to
+    be handed a private empty interview beside the real one."""
+    owner = authenticate(client, "client@example.com")
+    state = _open(client, owner, "DSI")["state"]
+    finish(client, owner, state["id"])
+
+    staff = authenticate(client, "staff@example.org")
+    reopened = _open(client, staff, "DSI")
+    assert reopened["state"]["id"] == state["id"], "the entity's interview, not a new one"
+    assert reopened["state"]["status"] == "completed"
+    assert reopened["messages"], "and its conversation comes with it"
+
+
+def test_a_correspondent_is_refused_a_second_interview_for_a_closed_entity(client):
+    """A second run would produce a competing état des lieux for the entity."""
+    owner = authenticate(client, "client@example.com")
+    state = _open(client, owner, "DSI")["state"]
+    finish(client, owner, state["id"])
+
+    structures = client.get(f"{API}/structures", headers=owner).json()
+    target = next(s for s in structures if s["code"] == "DSI")
+    again = client.post(f"{API}/sessions", headers=owner, json={"structure_id": target["id"]})
+    assert again.status_code == 409
+
+
+def test_staff_join_a_running_interview_rather_than_opening_one_beside_it(client):
+    owner = authenticate(client, "client@example.com")
+    state = _open(client, owner, "DSI")["state"]
+
+    staff = authenticate(client, "staff@example.org")
+    joined = _open(client, staff, "DSI")
+    assert joined["state"]["id"] == state["id"]
+
+
+def test_an_interview_still_running_is_not_announced_to_other_correspondents(client):
+    """"En cours" about a session they cannot reach would only confuse them."""
+    owner = authenticate(client, "client@example.com")
+    _open(client, owner, "DSI")
+
+    other = authenticate(client, "autre@example.com")
+    cards = client.get(f"{API}/structures", headers=other).json()
+    assert all(c["interview_status"] == "non_demarre" for c in cards)
+
+
+# --------------------------------------------------------------------------- #
+# Guided entry answers the current question, it does not "correct" it
+# --------------------------------------------------------------------------- #
+def test_filling_the_current_question_from_the_panel_advances(client):
+    """Guided entry fills the grid in the panel rather than in the chat. Holding
+    the cursor made the assistant ask the same question again on confirmation."""
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    first = state["question"]["id"]
+
+    client.put(
+        f"{API}/sessions/{state['id']}/answers", headers=headers,
+        json={"question_id": first, "value": "Mme Sonia Ben Ammar"},
+    )
+
+    after = client.get(f"{API}/sessions/{state['id']}", headers=headers).json()["state"]
+    assert after["question"]["id"] != first, "the interview moved on"
+    assert after["answered"] == 1
+
+
+def test_correcting_an_earlier_answer_does_not_move_the_cursor(client):
+    """The rail edits a point already passed; that must not skip the one being
+    asked now."""
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    first = state["question"]["id"]
+    answer(client, headers, state["id"], "Mme Sonia Ben Ammar")
+
+    current = client.get(f"{API}/sessions/{state['id']}", headers=headers).json()["state"]
+    here = current["question"]["id"]
+
+    client.put(
+        f"{API}/sessions/{state['id']}/answers", headers=headers,
+        json={"question_id": first, "value": "M. Karim Trabelsi"},
+    )
+
+    after = client.get(f"{API}/sessions/{state['id']}", headers=headers).json()["state"]
+    assert after["question"]["id"] == here, "still on the question being asked"
+
+
+def test_an_empty_answer_from_the_panel_never_advances(client):
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    first = state["question"]["id"]
+
+    client.put(
+        f"{API}/sessions/{state['id']}/answers", headers=headers,
+        json={"question_id": first, "value": ""},
+    )
+
+    after = client.get(f"{API}/sessions/{state['id']}", headers=headers).json()["state"]
+    assert after["question"]["id"] == first, "nothing was answered, nothing moves"
+
+
+# --------------------------------------------------------------------------- #
+# Jumping to a section from the rail
+# --------------------------------------------------------------------------- #
+def test_jumping_moves_the_interview_and_asks_that_question(client):
+    """The rail could already edit any point beside the conversation. Jumping
+    moves the interview itself, so the correspondent is *asked*."""
+    headers = authenticate(client, "client@example.com")
+    opened = _open(client, headers, "DSI")
+    state = opened["state"]
+    plan = get_plan("dsi")
+    target = plan[5]
+    assert target.id != state["question"]["id"], "a genuinely different point"
+
+    res = client.post(
+        f"{API}/sessions/{state['id']}/goto", headers=headers,
+        json={"question_id": target.id},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["state"]["question"]["id"] == target.id, "the interview moved"
+    assert target.prompt in body["reply"]["body"], "and the question was asked"
+
+
+def test_the_jump_is_announced_in_the_conversation(client):
+    """A question appearing out of order with no explanation reads as a bug, and
+    the transcript would show the interview lurching about for no reason."""
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    target = get_plan("dsi")[5]
+
+    client.post(
+        f"{API}/sessions/{state['id']}/goto", headers=headers,
+        json={"question_id": target.id},
+    )
+
+    detail = client.get(f"{API}/sessions/{state['id']}", headers=headers).json()
+    last = detail["messages"][-1]
+    assert last["role"] == "assistant"
+    assert target.section in last["body"], "it says which section we moved to"
+
+
+def test_jumping_backwards_is_allowed(client):
+    """Sections are not always worth doing in order, in either direction."""
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    first = state["question"]["id"]
+    answer(client, headers, state["id"], "Mme Sonia Ben Ammar")
+
+    res = client.post(
+        f"{API}/sessions/{state['id']}/goto", headers=headers,
+        json={"question_id": first},
+    )
+    assert res.status_code == 200
+    assert res.json()["state"]["question"]["id"] == first
+
+
+def test_an_unknown_question_is_refused(client):
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    res = client.post(
+        f"{API}/sessions/{state['id']}/goto", headers=headers,
+        json={"question_id": "no.such.question"},
+    )
+    assert res.status_code == 404
+
+
+def test_a_closed_interview_has_no_cursor_to_move(client):
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+    answer(client, headers, state["id"], "Mme Sonia Ben Ammar")
+    finish(client, headers, state["id"])
+
+    res = client.post(
+        f"{API}/sessions/{state['id']}/goto", headers=headers,
+        json={"question_id": get_plan("dsi")[5].id},
+    )
+    assert res.status_code == 409
+
+
+def test_nobody_navigates_an_interview_that_is_not_theirs(client):
+    """Staff read an interview; moving it is a write, and stays owner-only."""
+    headers = authenticate(client, "client@example.com")
+    state = _open(client, headers, "DSI")["state"]
+
+    staff = authenticate(client, "staff@example.org")
+    res = client.post(
+        f"{API}/sessions/{state['id']}/goto", headers=staff,
+        json={"question_id": get_plan("dsi")[5].id},
+    )
+    assert res.status_code == 404

@@ -24,7 +24,8 @@ from app.core.crypto import (
     wrap_dek,
 )
 from app.ai import engine, llm
-from app.db.models import Answer, ChatMessage, Export, Structure, SurveySession, utcnow
+from app.ai import polish as answer_polish
+from app.db.models import Answer, ChatMessage, Export, Structure, SurveySession, User, utcnow
 from app.db.session import get_db
 from app.pca.blueprint import TEMPLATE_FILES, Question, get_plan, sections
 from app.pca import transcript
@@ -37,8 +38,10 @@ from app.schemas.api import (
     ContactCard,
     ExportOut,
     FinishRequest,
+    GotoRequest,
     MessageOut,
     MissingPoint,
+    NotesUpdate,
     PendingAnswer,
     ProgressSection,
     QuestionOut,
@@ -278,6 +281,25 @@ def read_answer(dek: bytes, survey_id: str, row: Optional[Answer]) -> Optional[D
 # --------------------------------------------------------------------------- #
 # Structures
 # --------------------------------------------------------------------------- #
+def interview_by_structure(db: Session) -> Dict[str, SurveySession]:
+    """The one interview that counts for each entity, whoever ran it.
+
+    A closed interview outranks an open one whatever the dates say. This is the
+    same rule `create_session` and the oversight screen apply; it lives here so
+    the three cannot drift apart and show an entity three different ways.
+    """
+    sessions = list(
+        db.execute(
+            select(SurveySession).order_by(SurveySession.last_activity_at.desc())
+        ).scalars()
+    )
+    resolved: Dict[str, SurveySession] = {s.structure_id: s for s in reversed(sessions)}
+    for survey in sessions:
+        if survey.status == "completed":
+            resolved[survey.structure_id] = survey
+    return resolved
+
+
 @router.get("/structures", response_model=List[StructureOut])
 def list_structures(
     db: Session = Depends(get_db),
@@ -290,7 +312,34 @@ def list_structures(
     if allowed and principal.role == "client":
         codes = {c.strip() for c in allowed.split(",") if c.strip()}
         rows = [r for r in rows if r.code in codes]
-    return [_structure_out(r) for r in rows]
+
+    resolved = interview_by_structure(db)
+    emails = {u.id: u.email for u in db.execute(select(User)).scalars()}
+
+    cards: List[StructureOut] = []
+    for structure in rows:
+        card = _structure_out(structure)
+        survey = resolved.get(structure.id)
+        if survey is not None:
+            # A closed interview is everyone's business: it is the thing that
+            # stops a second one being opened, so the card must say so even to
+            # someone who did not run it. One still in progress is reported only
+            # to its owner and to staff - telling a correspondent "en cours"
+            # about a session they cannot reach would only confuse them.
+            if (
+                survey.status == "completed"
+                or survey.user_id == principal.id
+                or principal.role == "admin"
+            ):
+                card.interview_status = survey.status
+                card.interview_session_id = survey.id
+                if survey.status == "completed":
+                    card.completed_by = emails.get(survey.user_id)
+                    card.completed_at = (
+                        survey.completed_at.isoformat() if survey.completed_at else None
+                    )
+        cards.append(card)
+    return cards
 
 
 @router.get("/contact", response_model=ContactCard)
@@ -339,22 +388,26 @@ def create_session(
                 detail="Vous n'etes pas habilite a documenter cette structure.",
             )
 
-    # One interview per entity, ever. Resume one left open; refuse to restart
-    # one already closed - its document is the deliverable, and a second run
-    # would quietly produce a competing état des lieux for the same entity.
+    # One interview per entity, ever - and "per entity" means the structure,
+    # not whoever happens to be signed in. Scoping this to the caller let every
+    # account open its own parallel interview: an administrator opening a card
+    # started a blank état des lieux beside a colleague's finished one, and the
+    # picker then showed the blank one as the truth.
     # A closed session wins over an open one whatever the dates say: that is
     # what makes this self-healing where a restart already slipped through.
     history = list(
         db.execute(
             select(SurveySession)
-            .where(
-                SurveySession.user_id == principal.id,
-                SurveySession.structure_id == structure.id,
-            )
+            .where(SurveySession.structure_id == structure.id)
             .order_by(SurveySession.started_at.desc())
         ).scalars()
     )
-    if any(s.status == "completed" for s in history):
+    closed = next((s for s in history if s.status == "completed"), None)
+    if closed is not None:
+        # Staff open it to read what was collected. A correspondent is told it
+        # is done and sent to the document, never into a second interview.
+        if principal.role == "admin":
+            return get_session(closed.id, db, principal)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -362,7 +415,14 @@ def create_session(
                 "Vous pouvez le consulter ou retélécharger le document."
             ),
         )
-    existing = next((s for s in history if s.status == "in_progress"), None)
+
+    existing = next(
+        (s for s in history if s.status == "in_progress" and s.user_id == principal.id), None
+    )
+    if existing is None and principal.role == "admin":
+        # Staff join the interview that is actually running rather than opening
+        # a private empty one beside it.
+        existing = next((s for s in history if s.status == "in_progress"), None)
     if existing is not None:
         return get_session(existing.id, db, principal)
 
@@ -398,7 +458,7 @@ def get_session(
     db: Session = Depends(get_db),
     principal: deps.Principal = Depends(deps.require_password_set),
 ) -> SessionDetail:
-    survey = deps.load_active_session(db, principal.id, session_id)
+    survey = deps.load_session_for_reading(db, principal, session_id)
     dek = unwrap_dek(survey.wrapped_dek)
 
     rows = db.execute(
@@ -407,7 +467,113 @@ def get_session(
     return SessionDetail(
         state=build_state(db, survey),
         messages=[_message_out(dek, survey.id, r) for r in rows],
+        notes=read_notes(dek, survey),
     )
+
+
+@router.post("/sessions/{session_id}/goto", response_model=ChatResponse)
+def goto_question(
+    session_id: str,
+    payload: GotoRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: deps.Principal = Depends(deps.require_csrf),
+) -> ChatResponse:
+    """Move the interview to a point picked from the rail, and ask it.
+
+    The rail could already open any answer for correction, but that edits a
+    point beside the conversation - it never moved the interview. Sections are
+    not always worth doing in order: a correspondent who has the application
+    inventory to hand should be able to go there and be *asked*, rather than
+    filling a form in a side panel.
+
+    The jump is announced in the conversation on purpose. A question appearing
+    out of order with no explanation reads as a bug, and the transcript - which
+    is re-read long afterwards - would show the interview lurching about with
+    nothing to say why.
+    """
+    survey = deps.load_active_session(db, principal.id, session_id)
+    if survey.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="L'entretien est clôturé : rouvrez un point depuis le panneau pour le corriger.",
+        )
+
+    plan = get_plan(survey.template_kind)
+    index = next((i for i, q in enumerate(plan) if q.id == payload.question_id), None)
+    if index is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question inconnue.")
+
+    dek = unwrap_dek(survey.wrapped_dek)
+    question = plan[index]
+    staying = index == survey.cursor
+
+    survey.cursor = index
+    # The re-ask counter belongs to the question we just left.
+    survey.followups = 0
+    survey.last_activity_at = utcnow()
+
+    lead = (
+        f"Nous reprenons « {question.section} »."
+        if staying
+        else f"Très bien, nous passons à « {question.section} »."
+    )
+    reply_row = append_message(
+        db, survey, dek, "assistant", f"{lead}\n\n{question.prompt}",
+        intent="navigation", question_id=question.id,
+    )
+
+    audit.record(
+        db, action="survey.goto", actor_id=principal.id, target=survey.id,
+        ip=ratelimit.client_ip(request),
+        meta={"question_id": question.id, "section": question.section},
+    )
+    db.commit()
+    transcript.save(db, survey, dek)
+
+    return ChatResponse(
+        reply=_message_out(dek, survey.id, reply_row),
+        state=build_state(db, survey),
+        intent="navigation",
+        recorded=False,
+    )
+
+
+def read_notes(dek: bytes, survey: SurveySession) -> str:
+    """The interviewer's notes, or "" when there are none.
+
+    Unreadable notes never fail the interview they belong to: the conversation
+    and the answers are the record, this is a memo beside it.
+    """
+    if not survey.notes_enc:
+        return ""
+    try:
+        return str(open_json(dek, survey.id, "notes", survey.notes_enc) or "")
+    except Exception:                       # noqa: BLE001 - see docstring
+        return ""
+
+
+@router.put("/sessions/{session_id}/notes", response_model=NotesUpdate)
+def save_notes(
+    session_id: str,
+    payload: NotesUpdate,
+    db: Session = Depends(get_db),
+    principal: deps.Principal = Depends(deps.require_csrf),
+) -> NotesUpdate:
+    """Replace the private notes for this interview.
+
+    Owner-only, like every other write: staff read an interview, they do not
+    annotate someone else's. Sealed with the session key, and deliberately not
+    audited by content - a note is working memory, not a decision.
+    """
+    survey = deps.load_active_session(db, principal.id, session_id)
+    dek = unwrap_dek(survey.wrapped_dek)
+
+    text = payload.text.strip()
+    survey.notes_enc = seal_json(dek, survey.id, "notes", text) if text else None
+    survey.last_activity_at = utcnow()
+    db.commit()
+    return NotesUpdate(text=text)
 
 
 # --------------------------------------------------------------------------- #
@@ -419,7 +585,7 @@ def list_answers(
     db: Session = Depends(get_db),
     principal: deps.Principal = Depends(deps.require_password_set),
 ) -> List[AnswerOut]:
-    survey = deps.load_active_session(db, principal.id, session_id)
+    survey = deps.load_session_for_reading(db, principal, session_id)
     dek = unwrap_dek(survey.wrapped_dek)
     stored = _answer_map(db, survey)
 
@@ -469,16 +635,41 @@ def override_answer(
     store_answer(db, survey, dek, question, body, completeness, confirmed=True)
     survey.last_activity_at = utcnow()
 
+    # Answering the CURRENT question from the panel is an answer, not a
+    # correction. Guided entry on a table fills the grid here rather than in
+    # the conversation, and holding the cursor made the assistant ask the very
+    # same question again the moment it was confirmed. Corrections to earlier
+    # points never move it.
+    plan = get_plan(survey.template_kind)
+    index = next((i for i, q in enumerate(plan) if q.id == question.id), None)
+    advancing = (
+        survey.status != "completed"
+        and index is not None
+        and index == survey.cursor
+        and completeness != "vide"
+    )
+
     # A correction made from the rail is part of the conversation: without this
     # the transcript would still show the superseded answer and nothing else.
     summary = (
         f"{len(body['rows'])} ligne(s)" if question.kind == "grid"
         else (body["value"][:160] + ("…" if len(body["value"]) > 160 else ""))
     )
+    if advancing:
+        survey.cursor = index + 1
+        survey.followups = 0
+        reply_text = f"C'est noté : {summary}"
+        if survey.cursor < len(plan):
+            reply_text = f"{reply_text}\n\n{plan[survey.cursor].prompt}"
+    else:
+        reply_text = f"Correction enregistrée pour « {question.label} » :\n\n{summary}"
+
     append_message(
-        db, survey, dek, "assistant",
-        f"Correction enregistrée pour « {question.label} » :\n\n{summary}",
-        intent="correction", question_id=question.id,
+        db, survey, dek, "assistant", reply_text,
+        intent="reponse" if advancing else "correction",
+        question_id=(
+            plan[survey.cursor].id if survey.cursor < len(plan) else question.id
+        ),
     )
 
     audit.record(
@@ -511,6 +702,7 @@ def _safe_name(text: str) -> str:
 def export_session(
     session_id: str,
     request: Request,
+    polish: bool = False,
     db: Session = Depends(get_db),
     principal: deps.Principal = Depends(deps.require_csrf),
 ) -> ExportOut:
@@ -537,6 +729,15 @@ def export_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Aucune réponse enregistrée : le document serait vide.",
+        )
+
+    # Optional, deliberate, and non-destructive: the rewrite happens on this
+    # copy, on its way into the document. What the correspondent actually typed
+    # stays in the database, in the transcript and in the next plain export.
+    polished = 0
+    if polish:
+        answers, polished = answer_polish.polish_answers(
+            answers, get_plan(survey.template_kind)
         )
 
     template_path = os.path.join(settings.TEMPLATE_DIR, TEMPLATE_FILES[survey.template_kind])
@@ -574,7 +775,10 @@ def export_session(
     audit.record(
         db, action="survey.export", actor_id=principal.id, target=survey.id,
         ip=ratelimit.client_ip(request),
-        meta={"export_id": record.id, "sha256": digest, "answers": len(answers)},
+        meta={
+            "export_id": record.id, "sha256": digest, "answers": len(answers),
+            "polished": polished,
+        },
     )
     db.commit()
 
@@ -585,6 +789,7 @@ def export_session(
         sha256=record.sha256,
         created_at=deps._aware(record.created_at).isoformat(),
         download_token=security_sign(record.id, principal.id),
+        polished=polished,
     )
 
 

@@ -54,6 +54,9 @@ def get_db() -> Iterator[Session]:
 # docs/SECURITY.md - but a pilot should not lose its data to a schema bump.
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("answers", "confirmed", "BOOLEAN NOT NULL DEFAULT 0"),
+    # The interviewer's private notes, sealed with the session key like every
+    # other free text. Nullable: an interview without notes stores nothing.
+    ("survey_sessions", "notes_enc", "TEXT"),
 ]
 
 # Run once, immediately after the matching column is created. Rows that already

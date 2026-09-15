@@ -3,20 +3,28 @@ import { motion } from "framer-motion";
 import type { AnswerRow, SessionState } from "../lib/api";
 
 /**
- * Progress rail, and the way back into any answer already given.
+ * Progress rail: the way back into any answer, and the way *to* any section.
  *
  * A section expands to the questions it covers; picking one opens it for
  * correction. Answers recorded earlier are the ones most likely to need a
  * second look, and scrolling the transcript to find them is not a way to edit
  * an audit document.
+ *
+ * « Y aller » does something different: it moves the interview itself, so the
+ * assistant asks that section's question in the conversation. Sections are not
+ * always worth doing in order - somebody who has the application inventory in
+ * front of them should be able to go there and be asked, rather than filling a
+ * form in a side panel.
  */
 type Props = {
   state: SessionState;
   answers: AnswerRow[];
   onEdit: (questionId: string) => void;
+  /** Absent once the interview is closed: there is no cursor left to move. */
+  onJump?: (questionId: string) => void;
 };
 
-export function ProgressRail({ state, answers, onEdit }: Props) {
+export function ProgressRail({ state, answers, onEdit, onJump }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const bySection = new Map<string, AnswerRow[]>();
   for (const answer of answers) {
@@ -71,15 +79,22 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
             const isOpen = open === section.title;
             const questions = bySection.get(section.title) ?? [];
 
+            // Where the interview should land: the first point still blank,
+            // or the opening one if the section is already complete.
+            const entry = questions.find((q) => q.completeness === "vide") ?? questions[0];
+
             return (
               <li key={section.title}>
+                <div
+                  className={`group/section flex w-full items-start rounded-xl transition-colors ${
+                    section.active ? "bg-poppy-500/10" : "hover:bg-ink-800"
+                  }`}
+                >
                 <button
                   type="button"
                   aria-expanded={isOpen}
                   onClick={() => setOpen(isOpen ? null : section.title)}
-                  className={`flex w-full items-start gap-3 rounded-xl px-2.5 py-2 text-left transition-colors ${
-                    section.active ? "bg-poppy-500/10" : "hover:bg-ink-800"
-                  }`}
+                  className="flex min-w-0 flex-1 items-start gap-3 rounded-xl px-2.5 py-2 text-left"
                 >
                   <span
                     aria-hidden="true"
@@ -125,6 +140,21 @@ export function ProgressRail({ state, answers, onEdit }: Props) {
                           strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
+
+                  {/* Moves the interview here and has the question asked, as
+                      opposed to the question rows below, which edit an answer
+                      beside the conversation. */}
+                  {onJump && entry && !section.active && (
+                    <button
+                      type="button"
+                      onClick={() => onJump(entry.question_id)}
+                      title={`Reprendre l'entretien à « ${section.title} »`}
+                      className="mr-1.5 mt-2 shrink-0 rounded-lg px-2 py-1 text-[10.5px] font-medium text-ink-400 opacity-0 transition hover:bg-ink-700 hover:text-poppy-500 focus:opacity-100 group-hover/section:opacity-100"
+                    >
+                      Y aller
+                    </button>
+                  )}
+                </div>
 
                 {isOpen && (
                   <ul className="mb-1 ml-7 mt-0.5 space-y-0.5 border-l border-ink-600 pl-2">

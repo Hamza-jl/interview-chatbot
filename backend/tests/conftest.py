@@ -82,6 +82,13 @@ def seeded() -> dict:
                     organisation="Organisation", role="client",
                     password_hash=security.hash_password(PASSWORD),
                     must_change_password=False, allowed_structures="DSI"))
+        # A second correspondent, on a different entity. Staff may read any
+        # interview; one correspondent must never read another's, and that rule
+        # needs an account to be tested against.
+        db.add(User(email="autre@example.com", full_name="Karim Trabelsi",
+                    organisation="Organisation", role="client",
+                    password_hash=security.hash_password(PASSWORD),
+                    must_change_password=False, allowed_structures="DCR"))
         db.add(User(email="staff@example.org", full_name="Consultant Devoteam",
                     organisation="Devoteam", role="admin",
                     password_hash=security.hash_password(PASSWORD),

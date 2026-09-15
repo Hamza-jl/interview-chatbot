@@ -32,13 +32,48 @@ export function ThankYou({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  async function save() {
+  const [polishing, setPolishing] = useState(false);
+  const [polished, setPolished] = useState<ExportResult | null>(null);
+
+  async function save(from: ExportResult = polished ?? result) {
     setDownloading(true);
     try {
-      await download(result.download_token, result.filename);
+      await download(from.download_token, from.filename);
     } finally {
       setDownloading(false);
     }
+  }
+
+  /**
+   * Rebuild the document with the written answers reformulated, then hand it
+   * over. Nothing recorded changes: the rewrite happens on a copy on its way
+   * into the .docx, so the plain version above stays available and the stored
+   * answers are untouched. Inference is local and on CPU, so this is slow.
+   */
+  async function polishAndSave() {
+    setPolishing(true);
+    try {
+      const better = await api<ExportResult>(
+        `/sessions/${state.id}/export?polish=true`,
+        { method: "POST" },
+      );
+      setPolished(better);
+      await save(better);
+    } catch {
+      onErrorFallback();
+    } finally {
+      setPolishing(false);
+    }
+  }
+
+  function onErrorFallback() {
+    // The panel has no error channel of its own; the plain document is still
+    // right there, so say what happened without stealing the screen.
+    setPolished(null);
+    window.alert(
+      "La reformulation n'a pas abouti. Le document ci-dessus, avec les réponses "
+      + "telles qu'elles ont été saisies, reste disponible.",
+    );
   }
 
   const firstName = user.full_name.split(/\s+/)[0];
@@ -125,7 +160,11 @@ export function ThankYou({
                   {(result.size_bytes / 1024).toFixed(0)} Ko · SHA-256 {result.sha256.slice(0, 12)}…
                 </div>
               </div>
-              <button onClick={save} disabled={downloading} className="btn-primary shrink-0 !px-4 !py-2.5 text-sm">
+              <button
+                onClick={() => save(result)}
+                disabled={downloading || polishing}
+                className="btn-primary shrink-0 !px-4 !py-2.5 text-sm"
+              >
                 {downloading ? <Spinner /> : (
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path
@@ -139,6 +178,31 @@ export function ThankYou({
                 )}
                 Télécharger
               </button>
+            </div>
+
+            {/* Optional, and never automatic: the rewrite touches the document
+                only, so the file above stays exactly as the answers were
+                typed. */}
+            <div className="mt-3 border-t border-ink-600/60 pt-3">
+              <button
+                onClick={polishAndSave}
+                disabled={downloading || polishing}
+                className="btn-ghost w-full !py-2 text-[13px]"
+              >
+                {polishing ? <Spinner /> : null}
+                {polishing
+                  ? "Reformulation en cours…"
+                  : polished
+                    ? `Retélécharger la version reformulée (${polished.polished} réponse${polished.polished > 1 ? "s" : ""})`
+                    : "Télécharger une version reformulée"}
+              </button>
+              <p className="mt-2 text-[11px] leading-snug text-ink-400">
+                {polishing
+                  ? "L'analyse tourne sur cette machine : comptez une à plusieurs minutes."
+                  : "Corrige l'orthographe et la syntaxe des réponses rédigées, sans rien ajouter "
+                    + "ni retirer. Les tableaux ne sont pas modifiés, et les réponses enregistrées "
+                    + "restent celles qui ont été saisies."}
+              </p>
             </div>
           </div>
 

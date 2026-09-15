@@ -179,6 +179,12 @@ export interface Structure {
   name: string;
   parent: string | null;
   template_kind: "dsi" | "entite";
+  /** Where the entity stands, whoever ran the interview - not just the reader. */
+  interview_status: "non_demarre" | "in_progress" | "completed";
+  interview_session_id: string | null;
+  /** Who closed it. Set only once the interview is completed. */
+  completed_by: string | null;
+  completed_at: string | null;
 }
 
 export interface Column {
@@ -249,6 +255,8 @@ export interface Message {
 export interface SessionDetail {
   state: SessionState;
   messages: Message[];
+  /** The interviewer's private notes. Never reaches the generated document. */
+  notes: string;
 }
 
 /** An extraction waiting to be verified. The interview holds until it is. */
@@ -334,6 +342,8 @@ export interface ExportResult {
   sha256: string;
   created_at: string;
   download_token: string;
+  /** Answers reformulated by the optional rewrite. 0 on a plain export. */
+  polished: number;
 }
 
 export interface Contact {

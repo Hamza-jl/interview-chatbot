@@ -85,15 +85,44 @@ def test_client_cannot_open_a_structure_outside_its_scope(client):
     assert res.status_code == 403
 
 
-def test_a_session_is_invisible_to_another_account(client):
+def _owned_session(client) -> str:
     owner = authenticate(client, "client@example.com")
     structures = client.get(f"{API}/structures", headers=owner).json()
-    session_id = client.post(
+    return client.post(
         f"{API}/sessions", headers=owner, json={"structure_id": structures[0]["id"]}
     ).json()["state"]["id"]
 
-    intruder = authenticate(client, "staff@example.org")
+
+def test_a_session_is_invisible_to_another_correspondent(client):
+    """One correspondent never reads another's interview. This is the rule that
+    matters now that staff are allowed through."""
+    session_id = _owned_session(client)
+
+    intruder = authenticate(client, "autre@example.com")
     assert client.get(f"{API}/sessions/{session_id}", headers=intruder).status_code == 404
+    assert client.get(f"{API}/sessions/{session_id}/answers", headers=intruder).status_code == 404
+
+
+def test_staff_may_read_an_interview_they_did_not_run(client):
+    """Deliberate, and a reversal of the earlier rule: the oversight screen
+    exists to answer "what did this entity say?", and an administrator who can
+    already reset an interview is not restrained by being unable to read it."""
+    session_id = _owned_session(client)
+
+    staff = authenticate(client, "staff@example.org")
+    assert client.get(f"{API}/sessions/{session_id}", headers=staff).status_code == 200
+    assert client.get(f"{API}/sessions/{session_id}/answers", headers=staff).status_code == 200
+
+
+def test_staff_still_cannot_write_into_an_interview_they_did_not_run(client):
+    """Reading opened; writing did not. Nobody answers for a correspondent."""
+    session_id = _owned_session(client)
+
+    staff = authenticate(client, "staff@example.org")
+    posted = client.post(
+        f"{API}/sessions/{session_id}/messages", headers=staff, json={"message": "Bonjour"}
+    )
+    assert posted.status_code == 404, "the write path stays owner-only"
 
 
 def test_admin_surface_is_closed_to_clients(client):
@@ -294,3 +323,65 @@ def test_a_locked_account_is_told_so_when_the_password_is_right(client):
             user.locked_until = None
             user.failed_attempts = 0
             db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Private notes
+# --------------------------------------------------------------------------- #
+def test_notes_are_saved_and_returned_to_their_owner(client):
+    owner = authenticate(client, "client@example.com")
+    session_id = _owned_session(client)
+
+    saved = client.put(
+        f"{API}/sessions/{session_id}/notes", headers=owner,
+        json={"text": "Rappeler la DSI pour le RTO."},
+    )
+    assert saved.status_code == 200
+
+    detail = client.get(f"{API}/sessions/{session_id}", headers=owner).json()
+    assert detail["notes"] == "Rappeler la DSI pour le RTO."
+
+
+def test_notes_are_stored_encrypted(client):
+    """Like every other free text in an interview."""
+    from sqlalchemy import select
+    from app.db.models import SurveySession
+    from app.db.session import SessionLocal
+
+    owner = authenticate(client, "client@example.com")
+    session_id = _owned_session(client)
+    secret = "Le RTO annonce est douteux"
+    client.put(f"{API}/sessions/{session_id}/notes", headers=owner, json={"text": secret})
+
+    with SessionLocal() as db:
+        row = db.execute(
+            select(SurveySession).where(SurveySession.id == session_id)
+        ).scalar_one()
+        assert row.notes_enc, "something was stored"
+        assert secret not in row.notes_enc, "and it is not the plaintext"
+
+
+def test_nobody_annotates_an_interview_that_is_not_theirs(client):
+    """Staff read an interview; writing - notes included - stays owner-only."""
+    session_id = _owned_session(client)
+
+    staff = authenticate(client, "staff@example.org")
+    refused = client.put(
+        f"{API}/sessions/{session_id}/notes", headers=staff, json={"text": "note"}
+    )
+    assert refused.status_code == 404
+
+    other = authenticate(client, "autre@example.com")
+    assert client.put(
+        f"{API}/sessions/{session_id}/notes", headers=other, json={"text": "note"}
+    ).status_code == 404
+
+
+def test_clearing_the_notes_removes_them(client):
+    owner = authenticate(client, "client@example.com")
+    session_id = _owned_session(client)
+    client.put(f"{API}/sessions/{session_id}/notes", headers=owner, json={"text": "a"})
+    client.put(f"{API}/sessions/{session_id}/notes", headers=owner, json={"text": "   "})
+
+    detail = client.get(f"{API}/sessions/{session_id}", headers=owner).json()
+    assert detail["notes"] == ""

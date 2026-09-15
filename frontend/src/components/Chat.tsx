@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ApiError,
   api,
+  download,
   type ChatResponse,
   type ExportResult,
   type Message,
@@ -41,6 +42,11 @@ export function Chat({ detail, user, onExit, onError }: Props) {
   // different things: reopening a closed interview to relire an answer must
   // not throw the "Merci" panel over the transcript.
   const [recapOpen, setRecapOpen] = useState(false);
+  // The interviewer's own memo. Encrypted like the answers, and deliberately
+  // absent from the generated document.
+  const [notes, setNotes] = useState(detail.notes ?? "");
+  const [notesOpen, setNotesOpen] = useState(Boolean(detail.notes));
+  const [notesSaved, setNotesSaved] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -209,6 +215,88 @@ export function Chat({ detail, user, onExit, onError }: Props) {
     }
   }
 
+  /**
+   * Close the interview and hand over the document, at any point.
+   *
+   * The review gate is still the guided way out, but it only appears once every
+   * question has been passed. An interview abandoned halfway had no exit that
+   * produced a document, which is the thing the whole session exists to make.
+   * Blank points are acknowledged rather than blocking - they come back as
+   * empty rubrics in the .docx, and the confirmation says so.
+   */
+  async function closeAndDownload() {
+    if (state.status !== "completed") {
+      const blanks = state.missing.length;
+      const confirmed = window.confirm(
+        blanks
+          ? `${blanks} point${blanks > 1 ? "s" : ""} reste${blanks > 1 ? "nt" : ""} sans réponse `
+            + `et apparaîtra${blanks > 1 ? "ont" : ""} vide${blanks > 1 ? "s" : ""} dans le document.\n\n`
+            + "Clôturer l'entretien maintenant ?"
+          : "Clôturer l'entretien et générer le document ?",
+      );
+      if (!confirmed) return;
+      // finish() exports and opens the recap on its own.
+      await finish(true);
+      return;
+    }
+
+    setFinishing(true);
+    try {
+      const result =
+        exported ??
+        (await api<ExportResult>(`/sessions/${state.id}/export`, { method: "POST" }));
+      setExported(result);
+      await download(result.download_token, result.filename);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Téléchargement impossible.");
+    } finally {
+      setFinishing(false);
+    }
+  }
+
+  /**
+   * Move the interview to a section picked in the rail.
+   *
+   * The reply comes back shaped like any other turn and is appended to the
+   * transcript, so the jump reads as part of the conversation rather than the
+   * questions silently reshuffling underneath.
+   */
+  async function jumpTo(questionId: string) {
+    setBusy(true);
+    try {
+      const res = await api<ChatResponse>(`/sessions/${state.id}/goto`, {
+        method: "POST",
+        body: { question_id: questionId },
+      });
+      setMessages((m) => [...m, res.reply]);
+      setState(res.state);
+      // An edit panel left open would be pointing at the section we just left.
+      setEditing(null);
+      setRailOpen(false);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Navigation impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Saved on blur: a memo nobody asked you to submit should not need a button. */
+  async function saveNotes() {
+    try {
+      await api(`/sessions/${state.id}/notes`, { method: "PUT", body: { text: notes } });
+      setNotesSaved(true);
+      window.setTimeout(() => setNotesSaved(false), 2000);
+    } catch (err) {
+      // Staff may read an interview but not annotate it; say so rather than
+      // losing the text silently.
+      onError(
+        err instanceof ApiError && err.status === 404
+          ? "Ces notes appartiennent au compte qui mène l'entretien."
+          : "Enregistrement des notes impossible.",
+      );
+    }
+  }
+
   const question = state.question;
 
   return (
@@ -223,9 +311,60 @@ export function Chat({ detail, user, onExit, onError }: Props) {
           {/* min-h-0 lets the section list scroll instead of pushing the header
               out of the column - without it the entity name is clipped away. */}
           <div className="min-h-0 flex-1">
-            <ProgressRail state={state} answers={answers} onEdit={openForEdit} />
+            <ProgressRail
+              state={state}
+              answers={answers}
+              onEdit={openForEdit}
+              // A closed interview has no cursor left to move.
+              onJump={state.status === "completed" ? undefined : jumpTo}
+            />
           </div>
-          <div className="shrink-0 border-t border-ink-600/70 p-3">
+          {/* The interviewer's own memo. Encrypted with the session key like
+              every answer, and deliberately absent from the .docx: this is
+              working memory, not a deliverable. */}
+          <div className="shrink-0 border-t border-ink-600/70 px-3 pt-3">
+            <button
+              onClick={() => setNotesOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-[.12em] text-ink-400 transition hover:text-ink-100"
+              aria-expanded={notesOpen}
+            >
+              <span>Notes privées</span>
+              <span className="text-sm leading-none">{notesOpen ? "−" : "+"}</span>
+            </button>
+            {notesOpen && (
+              <div className="mt-2">
+                <textarea
+                  rows={4}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                  placeholder="Ce qu'il faudra vérifier, rappeler, recouper…"
+                  aria-label="Notes privées sur cet entretien"
+                  className="scroll-slim w-full resize-none rounded-xl border border-ink-600 bg-ink-950 p-2 text-[12px] leading-relaxed text-ink-100 placeholder:text-ink-400 transition focus:border-poppy-500/60 focus:outline-none"
+                />
+                <p className="mt-1 text-[10.5px] leading-snug text-ink-400">
+                  {notesSaved
+                    ? "Enregistré."
+                    : "Chiffrées, et jamais reprises dans le document."}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0 space-y-2 border-t border-ink-600/70 p-3">
+            {/* Available throughout, not only at the review gate: an interview
+                stopped halfway still needs to produce its document. */}
+            <button
+              onClick={closeAndDownload}
+              disabled={busy || finishing}
+              className="btn-primary w-full !py-2 text-sm"
+            >
+              {finishing
+                ? "Génération…"
+                : state.status === "completed"
+                  ? "Télécharger le document"
+                  : "Clôturer et télécharger"}
+            </button>
             <button onClick={onExit} className="btn-ghost w-full !py-2 text-sm">
               Changer de structure
             </button>
@@ -340,7 +479,14 @@ export function Chat({ detail, user, onExit, onError }: Props) {
               onFinish={finish}
             />
           ) : (
-            <Composer question={question} busy={busy} onSend={send} />
+            <Composer
+              question={question}
+              busy={busy}
+              onSend={send}
+              // Guided entry opens the confirmation table itself, rather than
+              // composing a « | » line that has to be sent and re-extracted.
+              onGuided={question ? () => openForEdit(question.id) : undefined}
+            />
           )}
         </section>
 
@@ -358,6 +504,9 @@ export function Chat({ detail, user, onExit, onError }: Props) {
             pending={editing}
             busy={busy}
             mode="edit"
+            // Guided entry opens the question being asked right now, and
+            // saving it moves the interview on - so say so.
+            continues={editing.question_id === question?.id}
             onConfirm={saveEdit}
             onDiscard={() => setEditing(null)}
           />

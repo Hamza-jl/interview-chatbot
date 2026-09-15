@@ -8,12 +8,15 @@ export function TopNav({
   idleSeconds,
   onLogout,
   onOpenAdmin,
+  onHome,
 }: {
   user: User;
   idleSeconds: number;
   onLogout: () => void;
   /** Provided only for administrators; the entry is absent for everyone else. */
   onOpenAdmin?: () => void;
+  /** Back to the structure list. Absent when that is already what is shown. */
+  onHome?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -45,17 +48,31 @@ export function TopNav({
       >
         <CoBrand compact />
 
+        {/* The title doubles as the way home. It used to be dead text, which
+            left an interview with no exit but the browser's back button. */}
         <div className="hidden items-center gap-1 md:flex">
-          {["État des lieux"].map((item, i) => (
-            <span
-              key={item}
-              className={`rounded-lg px-3 py-1.5 text-[13px] transition ${
-                i === 0 ? "bg-ink-800 font-medium text-ink-100" : "text-ink-400"
-              }`}
+          {onHome ? (
+            <button
+              onClick={onHome}
+              title="Revenir à la liste des structures"
+              className="flex items-center gap-1.5 rounded-lg bg-ink-800 px-3 py-1.5 text-[13px] font-medium text-ink-100 transition hover:bg-ink-700 hover:text-poppy-500"
             >
-              {item}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M3 11l9-8 9 8M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              État des lieux
+            </button>
+          ) : (
+            <span className="rounded-lg bg-ink-800 px-3 py-1.5 text-[13px] font-medium text-ink-100">
+              État des lieux
             </span>
-          ))}
+          )}
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -108,6 +125,29 @@ export function TopNav({
                     )}
                   </div>
                 </div>
+                {/* Also in the menu, because the header button is hidden on a
+                    narrow screen and the way out must not be. */}
+                {onHome && (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      onHome();
+                    }}
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 border-b border-ink-600/60 px-4 py-3 text-left text-sm text-ink-200 transition hover:bg-poppy-500/10 hover:text-poppy-500"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M3 11l9-8 9 8M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Liste des structures
+                  </button>
+                )}
                 {onOpenAdmin && (
                   <button
                     onClick={() => {

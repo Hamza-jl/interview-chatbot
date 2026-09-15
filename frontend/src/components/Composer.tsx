@@ -7,6 +7,14 @@ type Props = {
   question: Question | null;
   busy: boolean;
   onSend: (message: string) => void;
+  /**
+   * Open the confirmation table for the current question.
+   *
+   * Guided entry used to compose a « | » line into the box, which then had to
+   * be sent and re-extracted before the table appeared - three steps to fill a
+   * grid the panel can edit directly.
+   */
+  onGuided?: () => void;
 };
 
 function kindLabel(kind: string): string {
@@ -15,16 +23,14 @@ function kindLabel(kind: string): string {
   return "réponse rédigée";
 }
 
-export function Composer({ question, busy, onSend }: Props) {
+export function Composer({ question, busy, onSend, onGuided }: Props) {
   const [text, setText] = useState("");
-  const [guided, setGuided] = useState(false);
   const [showExample, setShowExample] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
 
   const isGrid = question?.kind === "grid";
 
   useEffect(() => {
-    setGuided(false);
     setShowExample(false);
   }, [question?.id]);
 
@@ -105,16 +111,6 @@ export function Composer({ question, busy, onSend }: Props) {
           </motion.div>
         )}
 
-        {isGrid && guided && question && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <GuidedGrid question={question} onCompose={(line) => setText((t) => (t ? `${t}\n${line}` : line))} />
-          </motion.div>
-        )}
       </AnimatePresence>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -138,13 +134,14 @@ export function Composer({ question, busy, onSend }: Props) {
             Voir un exemple de réponse
           </button>
         )}
-        {isGrid && (
+        {isGrid && onGuided && (
           <button
             type="button"
-            onClick={() => setGuided((v) => !v)}
-            className={`chip ${guided ? "border-poppy-500/70 text-poppy-500" : ""}`}
+            disabled={busy}
+            onClick={onGuided}
+            className="chip"
           >
-            {guided ? "Fermer la saisie guidee" : "Saisie guidee (tableau)"}
+            Saisie guidée (tableau)
           </button>
         )}
       </div>
@@ -200,77 +197,6 @@ export function Composer({ question, busy, onSend }: Props) {
         Les informations saisies sont chiffrées avant enregistrement. Ne communiquez aucun mot de
         passe ni identifiant technique.
       </p>
-    </div>
-  );
-}
-
-/** Structured row builder for table questions. */
-function GuidedGrid({
-  question,
-  onCompose,
-}: {
-  question: Question;
-  onCompose: (line: string) => void;
-}) {
-  const [cells, setCells] = useState<Record<string, string>>({});
-
-  function add() {
-    const line = question.columns.map((c) => (cells[c.id] ?? "").trim()).join(" | ");
-    if (!line.replace(/\|/g, "").trim()) return;
-    onCompose(line);
-    setCells({});
-  }
-
-  return (
-    <div className="mb-3 rounded-2xl border border-ink-600 bg-ink-900 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[.12em] text-ink-400">
-          Ajouter une ligne
-        </span>
-        <span className="text-[11px] text-ink-400">{question.columns.length} colonnes</span>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {question.columns.map((column) => (
-          <div key={column.id}>
-            <label
-              className="mb-1 block truncate text-[11px] font-medium text-ink-300"
-              title={column.hint || column.label}
-              htmlFor={`col-${column.id}`}
-            >
-              {column.label}
-              {!column.required && <span className="text-ink-400"> (facultatif)</span>}
-            </label>
-            {column.choices ? (
-              <select
-                id={`col-${column.id}`}
-                className="field !py-2 text-sm"
-                value={cells[column.id] ?? ""}
-                onChange={(e) => setCells((c) => ({ ...c, [column.id]: e.target.value }))}
-              >
-                <option value="">—</option>
-                {column.choices.map((choice) => (
-                  <option key={choice} value={choice}>
-                    {choice}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={`col-${column.id}`}
-                className="field !py-2 text-sm"
-                value={cells[column.id] ?? ""}
-                onChange={(e) => setCells((c) => ({ ...c, [column.id]: e.target.value }))}
-                placeholder={column.hint ? column.hint.slice(0, 40) : ""}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-
-      <button type="button" onClick={add} className="btn-ghost mt-3 !py-2 text-sm">
-        + Ajouter au message
-      </button>
     </div>
   );
 }

@@ -161,12 +161,36 @@ def clear_auth_cookies(response: Response) -> None:
 
 
 def load_active_session(db: Session, user_id: str, session_id: str):
-    """Fetch a survey session, enforcing ownership at the query level."""
+    """Fetch a survey session, enforcing ownership at the query level.
+
+    This is the loader every WRITE goes through, and it stays strict: nobody
+    answers, corrects or closes an interview that is not theirs, staff included.
+    """
     from app.db.models import SurveySession
 
     stmt = select(SurveySession).where(
         SurveySession.id == session_id, SurveySession.user_id == user_id
     )
+    survey = db.execute(stmt).scalar_one_or_none()
+    if survey is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entretien introuvable.")
+    return survey
+
+
+def load_session_for_reading(db: Session, principal: "Principal", session_id: str):
+    """Fetch a survey session to READ it.
+
+    Same ownership rule as `load_active_session`, with one exception: staff may
+    read any interview. The oversight screen exists to answer "what did this
+    entity say?", and an administrator who can already reset an interview is
+    not meaningfully restrained by being unable to read it first. Writing stays
+    closed - this loader is deliberately not used by any mutating endpoint.
+    """
+    from app.db.models import SurveySession
+
+    stmt = select(SurveySession).where(SurveySession.id == session_id)
+    if principal.role != "admin":
+        stmt = stmt.where(SurveySession.user_id == principal.id)
     survey = db.execute(stmt).scalar_one_or_none()
     if survey is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entretien introuvable.")

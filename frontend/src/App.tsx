@@ -166,6 +166,7 @@ export default function App() {
             idleSeconds={idleLeft}
             onLogout={() => logout("user")}
             onOpenAdmin={user.role === "admin" ? () => setView("admin") : undefined}
+            onHome={view !== "picker" ? () => setView("picker") : undefined}
           />
           <main className="pt-4">
             {/* Enter-only for the same reason as the auth steps: a suspended
@@ -190,6 +191,7 @@ export default function App() {
                 transition={{ duration: 0.3 }}
               >
                 <StructurePicker
+                  isStaff={user.role === "admin"}
                   onError={notify}
                   onOpen={(session) => {
                     setDetail(session);

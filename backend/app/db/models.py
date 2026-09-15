@@ -129,6 +129,11 @@ class SurveySession(Base):
 
     wrapped_dek: Mapped[str] = mapped_column(Text)
 
+    # The interviewer's own notes - "rappeler la DSI pour le RTO". Sealed with
+    # the session key like every other free text, and deliberately absent from
+    # the generated document: this is a working memo, not a deliverable.
+    notes_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     started_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_activity_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

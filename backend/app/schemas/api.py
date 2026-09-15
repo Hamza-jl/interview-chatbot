@@ -75,9 +75,25 @@ class StructureOut(BaseModel):
     parent: Optional[str]
     template_kind: str
 
+    # Where the ENTITY stands, not where the caller stands. A card that reported
+    # only the reader's own session told an administrator an entity was
+    # untouched while a colleague had already closed it - and then opening it
+    # started a second, competing état des lieux.
+    interview_status: Literal["non_demarre", "in_progress", "completed"] = "non_demarre"
+    interview_session_id: Optional[str] = None
+    # Set once the interview is closed, so the card can say who signed it off.
+    completed_by: Optional[str] = None
+    completed_at: Optional[str] = None
+
 
 class SessionCreateRequest(BaseModel):
     structure_id: str = Field(min_length=8, max_length=64)
+
+
+class GotoRequest(BaseModel):
+    """Move the interview to a point chosen from the rail."""
+
+    question_id: str = Field(min_length=1, max_length=64)
 
 
 class QuestionOut(BaseModel):
@@ -141,6 +157,12 @@ class MessageOut(BaseModel):
 class SessionDetail(BaseModel):
     state: SessionState
     messages: List[MessageOut]
+    # The interviewer's private notes. Never reaches the generated document.
+    notes: str = ""
+
+
+class NotesUpdate(BaseModel):
+    text: str = Field(default="", max_length=20000)
 
 
 class ChatRequest(BaseModel):
@@ -224,6 +246,10 @@ class ExportOut(BaseModel):
     sha256: str
     created_at: str
     download_token: str
+    # How many answers the optional rewrite actually reformulated. 0 on a plain
+    # export, and also when the model was unreachable - the document is still
+    # produced, from the answers as recorded.
+    polished: int = 0
 
 
 class ContactCard(BaseModel):

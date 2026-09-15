@@ -18,6 +18,12 @@ type Props = {
   busy: boolean;
   /** "verify" = a fresh extraction; "edit" = revisiting a recorded answer. */
   mode?: "verify" | "edit";
+  /**
+   * Saving this one moves the interview on - true when the panel was opened
+   * for the question being asked right now, as guided entry does. Only the
+   * wording depends on it; the server decides what actually happens.
+   */
+  continues?: boolean;
   onConfirm: (value: string | null, rows: Record<string, string>[] | null) => void;
   onDiscard: () => void;
 };
@@ -30,6 +36,7 @@ export function VerificationPanel({
   pending,
   busy,
   mode = "verify",
+  continues = false,
   onConfirm,
   onDiscard,
 }: Props) {
@@ -243,7 +250,7 @@ export function VerificationPanel({
           {busy ? <Spinner /> : null}
           {busy
             ? "Enregistrement…"
-            : isEdit
+            : isEdit && !continues
               ? (isBlank ? "Enregistrer la réponse" : "Enregistrer la correction")
               : "Confirmer et continuer vers la question suivante"}
         </button>
