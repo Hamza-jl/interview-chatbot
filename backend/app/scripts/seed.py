@@ -85,12 +85,14 @@ ACCOUNTS = [
     ("mohamed.amir.essghir@devoteam.com", "Mohamed Amir Essghir", "admin", "Devoteam", None),
     ("faten.taghouti@devoteam.com", "Faten Taghouti", "admin", "Devoteam", None),
     ("mohamed.ben.ayed@devoteam.com", "Mohamed Ben Ayed", "admin", "Devoteam", None),
+    # Toujours en minuscules : la connexion compare a `email.lower()`, et une
+    # adresse capitalisee produit un compte qui existe et ne peut pas se
+    # connecter - exactement le piege des domaines reserves.
+    ("khadija.azzouz@devoteam.com", "Khadija Azzouz", "admin", "Devoteam", None),
+    ("zeineb.ghezaiel@devoteam.com", "Zeineb Ghezaiel", "admin", "Devoteam", None),
 
-    # Comptes de recette, créés partout, y compris sur le serveur. Le client
-    # n'est bridé sur aucune structure : il faut pouvoir dérouler les deux plans
-    # de questions et le choix d'entité. Leurs mots de passe sont générés et
-    # affichés comme les autres - rien n'est connu d'avance.
-    ("test@devoteam.com", "Compte de test", "client", "Devoteam", None),
+    # Compte de recette, cree partout, y compris sur le serveur. Son mot de
+    # passe est genere et affiche comme les autres - rien n'est connu d'avance.
     ("test.admin@devoteam.com", "Administrateur de test", "admin", "Devoteam", None),
 ]
 
