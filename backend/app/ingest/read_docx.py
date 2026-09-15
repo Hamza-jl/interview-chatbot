@@ -89,6 +89,35 @@ def _column_is_blank(table: Table, index: int, skip_header: bool) -> bool:
     return True
 
 
+def _is_unread_form(table: Table) -> bool:
+    """A table with blanks to fill that `_classify` could not make sense of.
+
+    The shape this catches is the matrix: row labels down the first column,
+    column headings across the first row, answers at the intersections - an
+    impact grid, a "montee en charge" schedule. It is not supported yet, and the
+    point of recognising it is to be able to say so rather than pass over it.
+
+    Layout boxes and glossaries are excluded: a table needs a real grid shape,
+    labels on both axes, and a meaningful share of its body still empty.
+    """
+    if len(table.rows) < 3 or len(table.rows[0].cells) < 3:
+        return False
+
+    header = [_cell_text(c) for c in table.rows[0].cells]
+    side = [_cell_text(r.cells[0]) for r in table.rows[1:]]
+    if sum(1 for h in header[1:] if not is_blank(h)) < 2:
+        return False
+    if sum(1 for s in side if not is_blank(s)) < 2:
+        return False
+
+    body = [
+        _cell_text(c)
+        for row in table.rows[1:]
+        for c in list(row.cells)[1:]
+    ]
+    return bool(body) and sum(1 for v in body if is_blank(v)) >= len(body) // 2
+
+
 def _classify(table: Table) -> str:
     """'grid', 'keyvalue' or 'prose' - decided on the table's own evidence."""
     if not table.rows:
@@ -115,26 +144,28 @@ def _classify(table: Table) -> str:
         if filled_rows <= 1 and len(table.rows) > 2:
             return "grid"
 
-    # Two columns, the left one consistently written and the right one empty:
-    # a list of fields.
-    if width == 2 and _column_is_blank(table, 1, skip_header=False):
+    # Two columns, the left one consistently written: a list of fields.
+    #
+    # What makes it a form is the label column, NOT how much of the answer
+    # column is still empty. Templates come back half-completed - a real BIA
+    # fiche had four of its six answers written and two left as "xx" - and
+    # requiring most of the column to be blank found nothing in it at all.
+    # Rows already answered are skipped when the slots are emitted, so a
+    # partially filled table asks only about what is actually missing.
+    if width == 2 and table.rows:
         labels = [_cell_text(r.cells[0]) for r in table.rows]
-        if sum(1 for label in labels if label) >= max(1, len(labels) // 2):
-            return "keyvalue"
+        answers = [_cell_text(r.cells[1]) for r in table.rows]
+        missing = [is_blank(a) or _is_instruction(a) for a in answers]
 
-    # The same thing with a header row over it - "Question | Réponse" is how
-    # most of these templates are actually written, and requiring the header
-    # cell to be empty missed every one of them.
-    if width == 2 and len(table.rows) >= 2:
-        body = table.rows[1:]
-        answers = [_cell_text(r.cells[1]) for r in body]
-        labels = [_cell_text(r.cells[0]) for r in body]
-        # An instruction the author left in the answer column ("N.B. : template
-        # envoyé séparément") is guidance, not data - it must not disqualify the
-        # row. Real data in most rows must.
-        unanswered = sum(1 for a in answers if is_blank(a) or _is_instruction(a))
-        if labels and all(labels) and unanswered >= max(1, len(body) // 2):
-            return "keyvalue-header"
+        if all(not is_blank(label) for label in labels) and any(missing):
+            # Row 0 is a column heading only if it carries one on BOTH sides -
+            # "Question | Réponse". A first row whose answer cell is blank is a
+            # question like any other, and skipping it loses a field.
+            heading = not is_blank(labels[0]) and not is_blank(answers[0])
+            if heading and any(missing[1:]):
+                return "keyvalue-header"
+            if not heading:
+                return "keyvalue"
 
     return "prose"
 
@@ -147,6 +178,7 @@ def read(path: str, filename: str = "") -> DocumentPlan:
     context: List[str] = []
     slots: List[Slot] = []
     notes: List[str] = []
+    ignored: List[str] = []
     table_index = 0
 
     for block in _iter_blocks(document):
@@ -155,13 +187,21 @@ def read(path: str, filename: str = "") -> DocumentPlan:
             text = block.text.strip()
             if level is not None and text:
                 if not title:
-                    title = text
+                    # A heading can carry a manual line break; the title is
+                    # shown on one line in a list, so it becomes one line here.
+                    title = " ".join(text.split())
                 # Keep the trail shallow: two levels is all a question needs.
                 context = (context[: max(0, level - 1)] + [text])[-3:]
             continue
 
         table_index += 1
         shape = _classify(block)
+
+        if shape == "prose" and _is_unread_form(block):
+            ignored.append(
+                f"« {context[-1] } » (tableau {table_index})" if context
+                else f"tableau {table_index}"
+            )
 
         if shape == "grid":
             header = [_cell_text(c) for c in block.rows[0].cells]
@@ -193,6 +233,11 @@ def read(path: str, filename: str = "") -> DocumentPlan:
                 if not label or is_blank(label):
                     continue
                 hint = _cell_text(row.cells[1]) if len(row.cells) > 1 else ""
+                # Already answered. Asking again would put the interviewee's
+                # reply over something the document already says - the one thing
+                # write-back must never do to a half-completed template.
+                if not is_blank(hint) and not _is_instruction(hint):
+                    continue
                 slots.append(
                     Slot(
                         id=f"docx.t{table_index}.r{row_index}",
@@ -208,6 +253,19 @@ def read(path: str, filename: str = "") -> DocumentPlan:
                         },
                     )
                 )
+
+    if ignored:
+        # Said out loud rather than passed over. These are matrix tables - row
+        # labels down the side, column headings across the top, answers at the
+        # intersections - and they carry real content in a BIA fiche. Reading
+        # them is not supported yet; leaving the reader silent about them would
+        # let someone hand over a document believing it complete.
+        notes.append(
+            "Tableau(x) non pris en charge, à compléter à la main : "
+            + ", ".join(ignored)
+            + ". Ces tableaux croisent des lignes et des colonnes déjà nommées ; "
+            "leurs cases seront laissées telles quelles."
+        )
 
     if not slots:
         notes.append(

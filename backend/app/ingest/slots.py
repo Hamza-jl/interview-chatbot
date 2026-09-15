@@ -25,7 +25,10 @@ from typing import Any, Dict, List, Optional
 _PLACEHOLDER = re.compile(
     r"^[\s.．_\-–—…·:;/\\|]*$"                       # rules and separators
     r"|^[\[\(<{].{0,60}[\]\)>}]$"                    # [à compléter], (nom)
-    r"|^(?:n/?a|néant|neant|nc|ras|xxx+|aaa+|\?+)$", # explicit nothings
+    # Explicit nothings. "xx" is the placeholder these templates actually use -
+    # written as xx, XX or Xx, and never three times. Requiring xxx read a real
+    # BIA template, eighteen tables of them, as having nothing to fill.
+    r"|^(?:n/?a|néant|neant|nc|ras|x{2,}|a{3,}|\?+|-+)$",
     re.IGNORECASE,
 )
 

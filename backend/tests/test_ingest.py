@@ -582,3 +582,108 @@ def test_a_short_answer_is_padded_to_the_column_count():
                 columns=["Application", "Editeur"])
 
     assert questions.example_row(slot, ["Sage"]) == "Sage | <Editeur>"
+
+
+# --------------------------------------------------------------------------- #
+# Shapes found in a real BIA fiche
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("text", ["xx", "XX", "Xx", "xxx", "-", "--"])
+def test_the_placeholder_these_templates_actually_use_is_blank(text):
+    """A real template marks every blank "xx", never "xxx".
+
+    Requiring three x's read an eighteen-table BIA fiche as having nothing to
+    fill, and the upload screen said so: "0 question".
+    """
+    assert is_blank(text)
+
+
+def test_a_half_filled_form_asks_only_about_what_is_missing(tmp_path):
+    """Templates come back partly completed; the rest still has to be asked.
+
+    Four of these six answers are written. Requiring most of the answer column
+    to be empty classified the whole table as prose and found neither blank.
+    """
+    document = Document()
+    document.add_heading("Fiche d'identité de l'entité", level=1)
+    rows = [
+        ("Nom du responsable", "xx"),
+        ("Organisation et effectifs", "L'entité se compose d'un manager et de six agents."),
+        ("Présentation de l'activité", "Souscription et gestion des contrats."),
+        ("Contraintes principales", "Dépendance au système de production."),
+        ("Périodes critiques", "Fin de trimestre."),
+        ("Historique des interruptions", "xx"),
+    ]
+    table = document.add_table(rows=len(rows), cols=2)
+    for i, (label, value) in enumerate(rows):
+        table.rows[i].cells[0].text = label
+        table.rows[i].cells[1].text = value
+    path = tmp_path / "half.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+
+    assert [s.label for s in plan.cells] == [
+        "Nom du responsable",
+        "Historique des interruptions",
+    ]
+    # And they point at their own rows, not at the first two.
+    assert [s.target["row"] for s in plan.cells] == [0, 5]
+
+
+def test_an_answer_already_written_is_never_asked_about_again(tmp_path):
+    """Overwriting what the document already says is the one unforgivable bug."""
+    document = Document()
+    document.add_heading("Identité", level=1)
+    table = document.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "Responsable"
+    table.rows[0].cells[1].text = "Mme Leila Ben Salah"
+    table.rows[1].cells[0].text = "Effectif"
+    path = tmp_path / "partly.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+
+    assert [s.label for s in plan.cells] == ["Effectif"]
+
+
+def test_a_matrix_table_is_reported_rather_than_passed_over(tmp_path):
+    """Row labels crossed with column headings - an impact grid.
+
+    Not supported yet. Saying nothing would let someone hand over a document
+    believing it complete.
+    """
+    document = Document()
+    document.add_heading("Évaluation des impacts", level=1)
+    table = document.add_table(rows=4, cols=3)
+    for i, name in enumerate(["", "Interruption < 1 jour", "Interruption >= 5 jours"]):
+        table.rows[0].cells[i].text = name
+    for i, name in enumerate(["Image de marque", "Désorganisation", "Financier"]):
+        table.rows[i + 1].cells[0].text = name
+    path = tmp_path / "matrix.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+
+    assert not plan.slots
+    assert plan.notes, "a table we cannot read must be named"
+    assert "Évaluation des impacts" in plan.notes[0]
+
+
+def test_a_glossary_is_not_reported_as_an_unfilled_form(tmp_path):
+    """Every answer is present: there is nothing to say about it."""
+    document = Document()
+    document.add_heading("Définitions", level=1)
+    table = document.add_table(rows=3, cols=2)
+    for i, (term, meaning) in enumerate(
+        [("Terme", "Description"), ("PCA", "Plan de continuité d'activité"),
+         ("DMIA", "Durée maximale d'interruption admissible")]
+    ):
+        table.rows[i].cells[0].text = term
+        table.rows[i].cells[1].text = meaning
+    path = tmp_path / "glossary.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+
+    assert not plan.slots
+    assert not [n for n in plan.notes if "non pris en charge" in n]
