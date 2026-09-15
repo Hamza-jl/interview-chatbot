@@ -221,6 +221,12 @@ class UploadedDocument(Base):
     blob_path: Mapped[str] = mapped_column(String(500))     # the original, sealed
     plan_enc: Mapped[str] = mapped_column(Text)             # slots + wording, sealed
 
+    # Background the consultant types in before the interview: which entity this
+    # is, what happened last year, what the document does not say. Sealed like
+    # everything else - it is the most freely written field in the application
+    # and therefore the most likely to carry something confidential.
+    context_enc: Mapped[str] = mapped_column(Text, default="")
+
     slot_count: Mapped[int] = mapped_column(Integer, default=0)
     grid_count: Mapped[int] = mapped_column(Integer, default=0)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)

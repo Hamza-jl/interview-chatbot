@@ -26,6 +26,9 @@ NAV = ["suivant", "precedent", "repeter", "terminer", "aucun"]
 
 ASSISTANT_NAME = "Argus"
 MAX_FOLLOWUPS = 2
+# The consultant's briefing rides along on every turn of the interview; past
+# this it crowds out the conversation it is meant to inform.
+MAX_BACKGROUND = 1200
 
 
 @dataclass
@@ -136,8 +139,19 @@ def build_context_block(
     position: str,
     existing: Optional[Dict[str, Any]],
     followups: int,
+    background: str = "",
 ) -> str:
-    parts = [
+    parts = []
+    if background:
+        # What the consultant typed in when setting the interview up. First,
+        # because it says who is being talked to - and flagged as background so
+        # the model never mistakes it for something the interviewee just said.
+        parts.append(
+            "CONTEXTE DE LA MISSION (fourni par le consultant, ce n'est pas une "
+            "reponse de la personne interrogee) :\n"
+            + background[:MAX_BACKGROUND]
+        )
+    parts += [
         f"ENTITE DOCUMENTEE : {structure_name}",
         f"MODELE : {template_label}",
         f"AVANCEMENT : {position}",
@@ -260,6 +274,7 @@ def run_turn(
     existing: Optional[Dict[str, Any]],
     followups: int,
     total: int = 0,
+    background: str = "",
 ) -> TurnResult:
     text = sanitize(user_message)
 
@@ -346,6 +361,7 @@ def run_turn(
         position=position,
         existing=existing,
         followups=followups,
+        background=background,
     )
 
     backend = active_backend()

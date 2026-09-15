@@ -36,6 +36,21 @@ VERIFY_PROMPT = (
 )
 
 
+def session_background(db: Session, survey) -> str:
+    """The briefing typed in for this interview, or nothing.
+
+    Only uploaded-document interviews carry one today; the prepared etats des
+    lieux have their own fixed wording and are left exactly as they were.
+    """
+    if not survey.document_id:
+        return ""
+    from app.api.documents import read_context
+    from app.db.models import UploadedDocument
+
+    document = db.get(UploadedDocument, survey.document_id)
+    return read_context(document) if document is not None else ""
+
+
 def _history(db: Session, survey: SurveySession, dek: bytes) -> List[Dict[str, str]]:
     rows = list(
         db.execute(
@@ -106,6 +121,7 @@ def send_message(
         existing=_existing_payload(db, survey, dek, question.id),
         followups=survey.followups,
         total=total,
+        background=session_background(db, survey),
     )
 
     recorded = False

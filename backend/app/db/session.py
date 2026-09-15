@@ -54,6 +54,22 @@ def get_db() -> Iterator[Session]:
 # docs/SECURITY.md - but a pilot should not lose its data to a schema bump.
 _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("answers", "confirmed", "BOOLEAN NOT NULL DEFAULT 0"),
+    # Document-driven interviews. `uploaded_documents` is a new table, so
+    # create_all builds it complete; `survey_sessions` already exists on every
+    # deployment and has to be altered. Declared without the foreign key: SQLite
+    # cannot add one through ALTER, and the mapper enforces the relationship
+    # either way.
+    ("survey_sessions", "document_id", "VARCHAR(32)"),
+    ("uploaded_documents", "context_enc", "TEXT NOT NULL DEFAULT ''"),
+]
+
+# Columns whose type changed. Postgres enforces VARCHAR length and SQLite does
+# not, so this runs on Postgres only - and it has to run, because an uploaded
+# document's template kind is "doc:" plus a 32-character id, which is 36
+# characters going into a column declared as 16. The insert fails outright.
+_WIDENED_COLUMNS: list[tuple[str, str, str]] = [
+    ("survey_sessions", "template_kind", "VARCHAR(64)"),
+    ("structures", "template_kind", "VARCHAR(64)"),
 ]
 
 # Run once, immediately after the matching column is created. Rows that already
@@ -84,6 +100,23 @@ def _apply_pending_columns() -> None:
             if backfill:
                 result = connection.execute(text(backfill))
                 logger.info("schema: backfilled %s row(s) in %s", result.rowcount, table)
+
+        if connection.dialect.name != "postgresql":
+            return
+        for table, column, ddl in _WIDENED_COLUMNS:
+            if table not in existing_tables:
+                continue
+            current = next(
+                (c for c in inspector.get_columns(table) if c["name"] == column), None
+            )
+            if current is None:
+                continue
+            length = getattr(current["type"], "length", None)
+            if length is not None and length < int(ddl.strip("VARCHAR()")):
+                logger.info("schema: widening %s.%s to %s", table, column, ddl)
+                connection.execute(
+                    text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {ddl}")
+                )
 
 
 def init_db() -> None:

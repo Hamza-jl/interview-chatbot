@@ -15,6 +15,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -107,6 +108,17 @@ def load_plan(document: UploadedDocument) -> tuple[DocumentPlan, Dict[str, Dict[
     return _plan_from_json(data), data.get("wording") or {}
 
 
+MAX_CONTEXT_CHARS = 4000
+
+
+def read_context(document: UploadedDocument) -> str:
+    """The briefing typed in for this document, unsealed."""
+    if not document.context_enc:
+        return ""
+    dek = unwrap_dek(document.wrapped_dek)
+    return open_json(dek, document.id, "context", document.context_enc) or ""
+
+
 def ensure_registered(document: UploadedDocument) -> str:
     """Put the plan back in `blueprint.PLANS` after a restart.
 
@@ -128,6 +140,7 @@ def _out(document: UploadedDocument) -> Dict[str, Any]:
         "slots": document.slot_count,
         "grids": document.grid_count,
         "size_bytes": document.size_bytes,
+        "has_context": bool(document.context_enc),
         "created_at": deps._aware(document.created_at).isoformat(),
     }
 
@@ -224,6 +237,51 @@ async def upload(
 
 
 # --------------------------------------------------------------------------- #
+# The briefing
+# --------------------------------------------------------------------------- #
+class ContextIn(BaseModel):
+    context: str = Field(default="", max_length=MAX_CONTEXT_CHARS)
+
+
+@router.put("/{document_id}/context")
+def set_context(
+    document_id: str,
+    payload: ContextIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: deps.Principal = Depends(deps.require_csrf),
+) -> Dict[str, Any]:
+    """Save what the consultant knows that the document does not say.
+
+    A blank template cannot say which entity is being interviewed, how big it
+    is, or what changed since last year - and that is exactly what turns
+    "Effectif ?" into a question worth asking. Written by hand because only the
+    person running the interview knows it.
+
+    Sealed, and stored against the document rather than the session: it is
+    written before the interview exists, and it survives the interview being
+    restarted.
+    """
+    document = _own(db, principal, document_id)
+    text = payload.context.strip()
+
+    dek = unwrap_dek(document.wrapped_dek)
+    document.context_enc = seal_json(dek, document.id, "context", text) if text else ""
+
+    # The wording was generated without it - or with an older version of it -
+    # so it is now out of date. Saying so beats silently keeping stale questions.
+    plan, wording = load_plan(document)
+    stale = bool(wording)
+
+    audit.record(
+        db, action="document.context", actor_id=principal.id, target=document.id,
+        ip=ratelimit.client_ip(request), meta={"chars": len(text)},
+    )
+    db.commit()
+    return {"id": document.id, "context": text, "questions_stale": stale}
+
+
+# --------------------------------------------------------------------------- #
 # Wording
 # --------------------------------------------------------------------------- #
 @router.post("/{document_id}/questions")
@@ -242,9 +300,10 @@ def write_questions(
     from app.ai import llm
 
     backend = llm.active_backend()
+    background = read_context(document)
     wording: Dict[str, Dict[str, str]] = {}
     for slot in plan.slots:
-        generated = ingest_questions.generate(slot, backend)
+        generated = ingest_questions.generate(slot, backend, background)
         wording[slot.id] = {
             "question": generated.question,
             "aide": generated.help,
@@ -258,7 +317,8 @@ def write_questions(
     audit.record(
         db, action="document.questions", actor_id=principal.id, target=document.id,
         ip=ratelimit.client_ip(request),
-        meta={"count": len(wording), "engine": getattr(backend, "name", "deterministe")},
+        meta={"count": len(wording), "engine": getattr(backend, "name", "deterministe"),
+              "context": len(background)},
     )
     db.commit()
 
@@ -306,6 +366,7 @@ def detail(
     return {
         **_out(document),
         "notes": plan.notes,
+        "context": read_context(document),
         "questions": [
             {"id": s.id, "kind": s.kind, "label": s.label, "section": s.section,
              "columns": s.columns, **(wording.get(s.id) or {})}

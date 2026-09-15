@@ -236,3 +236,172 @@ def test_a_discovered_blank_is_a_cell_not_a_free_answer(client, headers, tmp_pat
 
     assert "open" not in kinds.values(), kinds
     assert sorted(set(kinds.values())) == ["field", "grid"]
+
+
+# --------------------------------------------------------------------------- #
+# The briefing
+# --------------------------------------------------------------------------- #
+BRIEFING = (
+    "Division Réassurance, 4 personnes, rattachée à la Direction Technique. "
+    "Entretien de mise à jour : la fiche 2025 existe, seuls les processus ont changé."
+)
+
+
+def test_the_briefing_is_saved_and_read_back(client, headers, tmp_path):
+    body = _upload(client, headers, _questionnaire(tmp_path))
+
+    res = client.put(f"{API}/documents/{body['id']}/context", headers=headers,
+                     json={"context": BRIEFING})
+    assert res.status_code == 200, res.text
+
+    detail = client.get(f"{API}/documents/{body['id']}", headers=headers).json()
+    assert detail["context"] == BRIEFING
+    assert detail["has_context"] is True
+
+
+def test_the_briefing_is_sealed_at_rest(client, headers, tmp_path):
+    """It is the freest-typed field in the application, so the likeliest to
+    carry a name, a headcount or a weakness somebody would rather not leak."""
+    from sqlalchemy import select
+    from app.db.models import UploadedDocument
+    from app.db.session import SessionLocal
+
+    body = _upload(client, headers, _questionnaire(tmp_path))
+    client.put(f"{API}/documents/{body['id']}/context", headers=headers,
+               json={"context": BRIEFING})
+
+    with SessionLocal() as db:
+        stored = db.execute(
+            select(UploadedDocument.context_enc)
+            .where(UploadedDocument.id == body["id"])
+        ).scalar_one()
+
+    assert stored, "something must be stored"
+    assert "Réassurance" not in stored
+    assert "4 personnes" not in stored
+
+
+def test_the_briefing_reaches_the_question_writer(client, headers, tmp_path):
+    """The whole point: the model must be told what the document cannot say."""
+    from app.ingest import questions as ingest_questions
+
+    body = _upload(client, headers, _questionnaire(tmp_path))
+    client.put(f"{API}/documents/{body['id']}/context", headers=headers,
+               json={"context": BRIEFING})
+
+    seen = []
+
+    class Recording:
+        label = "stub"
+
+        def structured(self, *, system, messages, **_):
+            seen.append(messages[0]["content"])
+            return {"question": "Quel est l'effectif de la division ?",
+                    "aide": "", "exemple": "4"}
+
+    from app.ai import llm
+
+    saved = llm.active_backend
+    llm.active_backend = lambda: Recording()
+    try:
+        res = client.post(f"{API}/documents/{body['id']}/questions", headers=headers)
+    finally:
+        llm.active_backend = saved
+
+    assert res.status_code == 200, res.text
+    assert seen, "the writer was never called"
+    assert all("CONTEXTE DE LA MISSION" in prompt for prompt in seen)
+    assert all("Division Réassurance" in prompt for prompt in seen)
+
+
+def test_an_empty_briefing_adds_nothing_to_the_prompt(tmp_path):
+    from app.ingest import questions as ingest_questions
+    from app.ingest.slots import Slot
+
+    slot = Slot(id="s", kind="cell", label="Effectif", target={}, context=["Identité"])
+    assert "CONTEXTE" not in ingest_questions.prompt_for(slot, "")
+    assert "CONTEXTE" in ingest_questions.prompt_for(slot, BRIEFING)
+
+
+def test_the_briefing_is_flagged_as_not_being_an_answer():
+    """A briefing saying "4 personnes" must not become the answer to "Effectif".
+
+    The interview prompt labels it as the consultant's own note, so the model
+    has no licence to read it back as something the interviewee said.
+    """
+    from app.ai import engine
+    from app.pca.blueprint import get_plan
+
+    question = get_plan("entite")[0]
+    block = engine.build_context_block(
+        question,
+        structure_name="Division Réassurance",
+        template_label="entite",
+        position="question 1 sur 10",
+        existing=None,
+        followups=0,
+        background=BRIEFING,
+    )
+
+    assert "CONTEXTE DE LA MISSION" in block
+    assert "pas une reponse de la personne interrogee" in block
+
+
+# --------------------------------------------------------------------------- #
+# Upgrading a database that is already in service
+# --------------------------------------------------------------------------- #
+def test_the_new_columns_are_added_to_an_existing_database(tmp_path):
+    """A deployed server has survey_sessions already; create_all never alters it.
+
+    Left unregistered, the first interview after the upgrade fails on
+    "no column named document_id" - on the server, not here.
+    """
+    import sqlalchemy
+    from app.db import session as db_session
+
+    path = tmp_path / "old.db"
+    engine = sqlalchemy.create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+
+    # The schema as it stood before this feature.
+    with engine.begin() as connection:
+        connection.execute(sqlalchemy.text(
+            "CREATE TABLE survey_sessions (id VARCHAR(32) PRIMARY KEY, "
+            "template_kind VARCHAR(16))"
+        ))
+        connection.execute(sqlalchemy.text(
+            "INSERT INTO survey_sessions (id, template_kind) VALUES ('s1', 'entite')"
+        ))
+
+    saved = db_session.engine
+    db_session.engine = engine
+    try:
+        db_session._apply_pending_columns()
+    finally:
+        db_session.engine = saved
+
+    columns = {
+        c["name"]
+        for c in sqlalchemy.inspect(engine).get_columns("survey_sessions")
+    }
+    assert "document_id" in columns
+
+    # And the interview that was already open is still there.
+    with engine.begin() as connection:
+        rows = connection.execute(
+            sqlalchemy.text("SELECT id, template_kind FROM survey_sessions")
+        ).all()
+    assert rows == [("s1", "entite")]
+    engine.dispose()
+
+
+def test_a_document_template_kind_is_longer_than_the_old_column(tmp_path):
+    """The reason the widening exists, stated as a number.
+
+    Postgres enforces VARCHAR length; "doc:" + a 32-character id does not fit
+    in the 16 characters the column was declared with.
+    """
+    from app.ingest import plan as ingest_plan
+
+    kind = ingest_plan.template_kind("0" * 32)
+    assert len(kind) == 36
+    assert len(kind) > 16

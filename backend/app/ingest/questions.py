@@ -117,6 +117,11 @@ SYSTEM = (
 # paragraph; the interview shows it as the chatbot's own turn.
 _MAX_QUESTION = 220
 
+# A small model loses the thread of a long preamble, and the background is a
+# preamble to every one of thirty prompts. Enough for a real briefing, not
+# enough to bury the field being asked about.
+_MAX_BACKGROUND = 1200
+
 # Keys of the response schema. An answer that is one of these is the model
 # repeating the question back, never an example.
 _SCHEMA_WORDS = {"valeurs", "cellules", "exemple", "question", "aide", "...", "valeur"}
@@ -160,9 +165,17 @@ class GeneratedQuestion:
     seconds: float = 0.0
 
 
-def prompt_for(slot: Slot) -> str:
-    """The user half of the prompt. Short on purpose - small models drift."""
+def prompt_for(slot: Slot, background: str = "") -> str:
+    """The user half of the prompt. Short on purpose - small models drift.
+
+    `background` is what the consultant typed in before the interview. It goes
+    first, because it is what makes a generic label specific: "Effectif" asked
+    of a four-person team is a different question from "Effectif" asked of a
+    directorate, and only the person setting up the interview knows which.
+    """
     lines: List[str] = []
+    if background:
+        lines.append(f"CONTEXTE DE LA MISSION\n{background[:_MAX_BACKGROUND]}\n")
     if slot.context:
         lines.append(f"Section : {' > '.join(slot.context)}")
     lines.append(f"Champ : {slot.label}")
@@ -247,7 +260,7 @@ def parse(raw: str) -> Optional[Dict[str, str]]:
     return out if out["question"] else None
 
 
-def generate(slot: Slot, backend=None) -> GeneratedQuestion:
+def generate(slot: Slot, backend=None, background: str = "") -> GeneratedQuestion:
     """Phrase one question, falling back to a plain one if inference is down.
 
     Reuses the application's own backend selection, so an upload obeys the same
@@ -275,7 +288,7 @@ def generate(slot: Slot, backend=None) -> GeneratedQuestion:
         try:
             data = backend.structured(
                 system=SYSTEM,
-                messages=[{"role": "user", "content": prompt_for(slot)}],
+                messages=[{"role": "user", "content": prompt_for(slot, background)}],
                 schema=schema_for(slot),
                 max_tokens=400,
             )

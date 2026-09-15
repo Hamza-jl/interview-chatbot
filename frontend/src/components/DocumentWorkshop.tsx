@@ -72,6 +72,12 @@ export function DocumentWorkshop({
   const [preparing, setPreparing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // The briefing, and whether it has been saved since it was last edited. The
+  // questions are written from it, so an unsaved edit is a question that does
+  // not yet know what the consultant knows.
+  const [context, setContext] = useState("");
+  const [savedContext, setSavedContext] = useState("");
+  const [savingContext, setSavingContext] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
@@ -110,6 +116,8 @@ export function DocumentWorkshop({
     try {
       const result = await uploadDocument(file);
       setSelected(result);
+      setContext("");
+      setSavedContext("");
       void reload();
       if (result.slots === 0) {
         onError("Aucun emplacement à remplir n'a été trouvé dans ce fichier.");
@@ -125,14 +133,38 @@ export function DocumentWorkshop({
   async function open(document: UploadedDocument) {
     setSelected(null);
     try {
-      setSelected(await api<DocumentDetail>(`/documents/${document.id}`));
+      const detail = await api<DocumentDetail>(`/documents/${document.id}`);
+      setSelected(detail);
+      setContext(detail.context ?? "");
+      setSavedContext(detail.context ?? "");
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Document introuvable.");
     }
   }
 
+  async function saveContext(): Promise<boolean> {
+    if (!selected || context === savedContext) return true;
+    setSavingContext(true);
+    try {
+      await api<{ id: string }>(`/documents/${selected.id}/context`, {
+        method: "PUT",
+        body: { context },
+      });
+      setSavedContext(context);
+      return true;
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Contexte non enregistré.");
+      return false;
+    } finally {
+      setSavingContext(false);
+    }
+  }
+
   async function prepare() {
     if (!selected) return;
+    // Saved first: the questions are written from it, and a briefing still
+    // sitting unsaved in the box would produce questions that ignore it.
+    if (!(await saveContext())) return;
     setPreparing(true);
     try {
       const done = await api<DocumentDetail>(`/documents/${selected.id}/questions`, {
@@ -282,6 +314,55 @@ export function DocumentWorkshop({
 
             {selected.slots > 0 && (
               <>
+                {/* ---- 2. the briefing ---------------------------------- */}
+                <div className="mt-5">
+                  <label
+                    htmlFor="doc-context"
+                    className="text-xs font-semibold uppercase tracking-wide text-ink-400"
+                  >
+                    Contexte de l&apos;entretien
+                    <span className="ml-2 font-normal normal-case tracking-normal text-ink-500">
+                      facultatif, mais c&apos;est ce qui rend les questions précises
+                    </span>
+                  </label>
+                  <textarea
+                    id="doc-context"
+                    value={context}
+                    onChange={(e) => setContext(e.target.value.slice(0, 4000))}
+                    onBlur={() => void saveContext()}
+                    rows={4}
+                    placeholder={
+                      "De quelle entité s'agit-il, qui allez-vous interroger, " +
+                      "qu'est-ce que le document ne dit pas ?\n" +
+                      "Ex. : Division Réassurance, 4 personnes, rattachée à la " +
+                      "Direction Technique. Entretien de mise à jour : la fiche 2025 " +
+                      "existe, seuls les processus ont changé."
+                    }
+                    className="mt-2 w-full resize-y rounded-xl border border-ink-600/80 bg-ink-900/60 p-3 text-sm leading-relaxed text-ink-100 placeholder:text-ink-500 focus:border-poppy-500/60 focus:outline-none"
+                  />
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <p className="text-[11px] leading-relaxed text-ink-500">
+                      Lu par le chatbot pendant tout l&apos;entretien. Il ne répond
+                      jamais à votre place : ce que vous écrivez ici oriente les
+                      questions, il ne devient pas une réponse.
+                    </p>
+                    <span className="shrink-0 font-mono text-[10px] text-ink-500">
+                      {savingContext
+                        ? "enregistrement…"
+                        : context !== savedContext
+                          ? "non enregistré"
+                          : `${context.length}/4000`}
+                    </span>
+                  </div>
+                </div>
+
+                {ready && savedContext !== "" && context !== savedContext && (
+                  <p className="mt-3 rounded-xl border border-accent-fire/30 bg-accent-fire/10 p-3 text-xs leading-relaxed text-ink-200">
+                    Le contexte a changé depuis la rédaction des questions.
+                    Relancez « Préparer l&apos;entretien » pour les réécrire avec.
+                  </p>
+                )}
+
                 <div className="mt-5 flex items-baseline justify-between">
                   <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-400">
                     {ready ? "Questions rédigées" : "Emplacements détectés"}
@@ -335,10 +416,23 @@ export function DocumentWorkshop({
                       {preparing ? "Rédaction des questions…" : "Préparer l'entretien"}
                     </button>
                   ) : (
-                    <button onClick={start} disabled={starting} className="btn-primary">
-                      {starting ? <Spinner /> : null}
-                      {starting ? "Ouverture…" : "Démarrer l'entretien"}
-                    </button>
+                    <>
+                      <button onClick={start} disabled={starting} className="btn-primary">
+                        {starting ? <Spinner /> : null}
+                        {starting ? "Ouverture…" : "Démarrer l'entretien"}
+                      </button>
+                      {/* Adding context after the questions were written is the
+                          normal way round: you read them, see one is vague, and
+                          explain what was missing. */}
+                      <button
+                        onClick={prepare}
+                        disabled={preparing}
+                        className="btn-ghost"
+                      >
+                        {preparing ? <Spinner /> : null}
+                        {preparing ? "Réécriture…" : "Réécrire avec le contexte"}
+                      </button>
+                    </>
                   )}
                   {preparing && (
                     <p className="self-center text-xs text-ink-400">

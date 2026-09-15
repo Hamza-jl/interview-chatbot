@@ -357,6 +357,8 @@ export interface UploadedDocument {
   /** How many of those are tables rather than single cells. */
   grids: number;
   size_bytes: number;
+  /** Whether a briefing has been typed in for this document. */
+  has_context: boolean;
   created_at: string;
 }
 
@@ -379,6 +381,8 @@ export interface GeneratedQuestion {
 
 export interface DocumentDetail extends UploadedDocument {
   notes: string[];
+  /** The briefing, as it was last saved. */
+  context: string;
   questions: GeneratedQuestion[];
 }
 
