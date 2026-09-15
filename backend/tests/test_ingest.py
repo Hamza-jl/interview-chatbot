@@ -245,3 +245,225 @@ def test_the_parser_tolerates_prose_around_the_json():
 def test_an_answer_with_no_question_is_rejected():
     assert questions.parse('{"aide": "a", "exemple": "b"}') is None
     assert questions.parse("pas du json") is None
+
+
+# --------------------------------------------------------------------------- #
+# Writing the answers back
+# --------------------------------------------------------------------------- #
+def _round_trip(path, answers):
+    """Read a document, fill it, read the result back. The only honest check."""
+    from app.ingest import write_back
+
+    plan = reader.read(str(path), path.name)
+    filled = write_back.fill(path.read_bytes(), plan, answers)
+    out = path.with_name("rempli-" + path.name)
+    out.write_bytes(filled)
+    return plan, reader.read(str(out), out.name), out
+
+
+def test_a_word_answer_lands_in_the_cell_it_was_addressed_to(tmp_path):
+    path = _docx_with_keyvalue(tmp_path, header=True)
+    plan = read_docx.read(str(path))
+    target = next(s for s in plan.cells if s.label == "Direction")
+
+    from app.ingest import write_back
+    filled = write_back.fill(
+        path.read_bytes(), plan, {target.id: {"value": "Risques & Contrôle"}}
+    )
+
+    out = tmp_path / "rempli.docx"
+    out.write_bytes(filled)
+    document = Document(str(out))
+    table = document.tables[0]
+    row = target.target["row"]
+    assert table.rows[row].cells[1].text.strip() == "Risques & Contrôle"
+    # The neighbouring field must be untouched.
+    other = next(s for s in plan.cells if s.label == "Nom du responsable")
+    assert not table.rows[other.target["row"]].cells[1].text.strip()
+
+
+def test_a_word_table_grows_to_fit_the_answers(tmp_path):
+    document = Document()
+    document.add_heading("5. Applications", level=1)
+    table = document.add_table(rows=2, cols=3)
+    for i, name in enumerate(["Domaine", "Application", "Criticité"]):
+        table.rows[0].cells[i].text = name
+    path = tmp_path / "grid.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+    grid = plan.grids[0]
+    rows = [
+        {"Domaine": "Crédit", "Application": "Delta", "Criticité": "V"},
+        {"Domaine": "Risques", "Application": "SAB", "Criticité": "C"},
+        {"Domaine": "RH", "Application": "Sage", "Criticité": "MC"},
+    ]
+
+    from app.ingest import write_back
+    filled = write_back.fill(path.read_bytes(), plan, {grid.id: {"rows": rows}})
+    out = tmp_path / "rempli.docx"
+    out.write_bytes(filled)
+
+    written = Document(str(out)).tables[0]
+    body = [
+        [c.text.strip() for c in r.cells]
+        for r in written.rows[1:]
+        if any(c.text.strip() for c in r.cells)
+    ]
+    assert body == [["Crédit", "Delta", "V"], ["Risques", "SAB", "C"], ["RH", "Sage", "MC"]]
+
+
+def test_an_unanswered_slot_stays_blank(tmp_path):
+    """A gap in the document must remain a gap, not become an empty string."""
+    path = _docx_with_keyvalue(tmp_path, header=True)
+    plan = read_docx.read(str(path))
+
+    from app.ingest import write_back
+    filled = write_back.fill(path.read_bytes(), plan, {})
+    out = tmp_path / "vide.docx"
+    out.write_bytes(filled)
+
+    again = read_docx.read(str(out))
+    assert len(again.cells) == len(plan.cells), "every blank is still a blank"
+
+
+def test_an_excel_round_trip_writes_both_shapes(tmp_path):
+    book = Workbook()
+    fiche = book.active
+    fiche.title = "Fiche"
+    fiche.cell(row=1, column=1, value="Nom du responsable")
+    grid = book.create_sheet("Applications")
+    for column, name in enumerate(["Domaine", "Application"], start=1):
+        grid.cell(row=1, column=column, value=name)
+    path = tmp_path / "form.xlsx"
+    book.save(path)
+
+    plan = read_xlsx.read(str(path))
+    cell = next(s for s in plan.cells)
+    table = next(s for s in plan.grids)
+
+    from app.ingest import write_back
+    filled = write_back.fill(
+        path.read_bytes(), plan,
+        {
+            cell.id: {"value": "Mme Ben Salah"},
+            table.id: {"rows": [{"Domaine": "Crédit", "Application": "Delta"}]},
+        },
+    )
+    out = tmp_path / "rempli.xlsx"
+    out.write_bytes(filled)
+
+    from openpyxl import load_workbook
+    written = load_workbook(str(out))
+    assert written["Fiche"].cell(row=1, column=2).value == "Mme Ben Salah"
+    assert written["Applications"].cell(row=2, column=1).value == "Crédit"
+    assert written["Applications"].cell(row=2, column=2).value == "Delta"
+
+
+def test_the_original_formatting_survives(tmp_path):
+    """The deliverable must look like the client's document, not a rebuild."""
+    document = Document()
+    document.add_heading("Section conservée", level=1)
+    table = document.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "Question"
+    table.rows[0].cells[1].text = "Réponse"
+    table.rows[1].cells[0].text = "Responsable"
+    document.add_paragraph("Instruction pré-imprimée à conserver.")
+    path = tmp_path / "styled.docx"
+    document.save(path)
+
+    plan = read_docx.read(str(path))
+    from app.ingest import write_back
+    filled = write_back.fill(
+        path.read_bytes(), plan, {plan.cells[0].id: {"value": "Mme Ben Salah"}}
+    )
+    out = tmp_path / "rempli.docx"
+    out.write_bytes(filled)
+
+    text = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    assert "Section conservée" in text
+    assert "Instruction pré-imprimée à conserver." in text
+
+
+def test_a_flat_pdf_is_refused_rather_than_drawn_on(tmp_path):
+    """Guessed coordinates in a signed document are worse than a refusal."""
+    import fitz
+
+    from app.ingest import write_back
+
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 100), "Rapport")
+    path = tmp_path / "flat.pdf"
+    document.save(str(path))
+    document.close()
+
+    plan = reader.read(str(path), path.name)
+    assert not plan.slots
+    assert any("formulaire" in n for n in plan.notes)
+
+    with pytest.raises(write_back.WriteBackError) as refused:
+        write_back.fill(path.read_bytes(), plan, {})
+    assert "source" in str(refused.value)
+
+
+# --------------------------------------------------------------------------- #
+# An uploaded document becomes an ordinary questionnaire
+# --------------------------------------------------------------------------- #
+def test_a_discovered_document_registers_as_a_plan(tmp_path):
+    """The whole point: get_plan works, so every existing call site works."""
+    from app.ingest import plan as ingest_plan
+    from app.pca.blueprint import get_plan, sections
+
+    document = Document()
+    document.add_heading("1. Fiche", level=1)
+    kv = document.add_table(rows=1, cols=2)
+    kv.rows[0].cells[0].text = "Nom du responsable"
+    document.add_heading("2. Applications", level=1)
+    grid = document.add_table(rows=2, cols=2)
+    for i, name in enumerate(["Domaine", "Application"]):
+        grid.rows[0].cells[i].text = name
+    path = tmp_path / "plan.docx"
+    document.save(path)
+
+    discovered = read_docx.read(str(path))
+    built = ingest_plan.build("test1", discovered, {})
+    kind = ingest_plan.template_kind("test1")
+
+    try:
+        assert get_plan(kind) == built
+        assert len(sections(kind)) == 2, "the rail groups by the document's headings"
+
+        cell = next(q for q in get_plan(kind) if q.kind == "open")
+        assert cell.target.mode == "cell"
+        table = next(q for q in get_plan(kind) if q.kind == "grid")
+        assert table.target.mode == "rows"
+        assert [c.id for c in table.columns] == ["Domaine", "Application"]
+    finally:
+        ingest_plan.forget("test1")
+
+
+def test_a_generated_question_is_never_mandatory(tmp_path):
+    """A blank the author never meant to fill must not block the review gate."""
+    from app.ingest import plan as ingest_plan
+
+    document = Document()
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "Champ facultatif"
+    path = tmp_path / "opt.docx"
+    document.save(path)
+
+    built = ingest_plan.build("test2", read_docx.read(str(path)), {})
+    try:
+        assert all(q.optional for q in built)
+    finally:
+        ingest_plan.forget("test2")
+
+
+def test_forgetting_a_document_removes_its_plan():
+    from app.ingest import plan as ingest_plan
+
+    ingest_plan.register("test3", [])
+    assert ingest_plan.is_registered("test3")
+    ingest_plan.forget("test3")
+    assert not ingest_plan.is_registered("test3")

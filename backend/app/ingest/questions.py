@@ -173,3 +173,50 @@ def parse(raw: str) -> Optional[Dict[str, str]]:
     cells = data.get("cellules")
     out["cellules"] = [str(c) for c in cells] if isinstance(cells, list) else []
     return out if out["question"] else None
+
+
+def generate(slot: Slot, backend=None) -> GeneratedQuestion:
+    """Phrase one question, falling back to a plain one if inference is down.
+
+    Reuses the application's own backend selection, so an upload obeys the same
+    LLM_PROVIDER setting as the interview and there is no second place to
+    configure a model.
+    """
+    import time
+
+    from app.ai import llm
+
+    if backend is None:
+        backend = llm.active_backend()
+    if backend is None:
+        return fallback(slot)
+
+    started = time.perf_counter()
+    try:
+        data = backend.structured(
+            system=SYSTEM,
+            messages=[{"role": "user", "content": prompt_for(slot)}],
+            schema=schema_for(slot),
+            max_tokens=400,
+        )
+    except Exception as exc:                                   # noqa: BLE001
+        logger.warning("question generation failed for %s: %s", slot.id, exc)
+        return fallback(slot)
+
+    question = str(data.get("question") or "").strip()
+    if not question:
+        return fallback(slot)
+
+    if slot.kind == "grid":
+        cells = data.get("cellules")
+        example = example_row(slot, cells if isinstance(cells, list) else [])
+    else:
+        example = str(data.get("exemple") or "").strip()
+
+    return GeneratedQuestion(
+        question=question,
+        help=str(data.get("aide") or "").strip(),
+        example=example,
+        engine=getattr(backend, "label", getattr(backend, "name", "?")),
+        seconds=round(time.perf_counter() - started, 1),
+    )
