@@ -12,6 +12,7 @@ import pytest
 from docx import Document
 from openpyxl import Workbook, load_workbook
 
+from app.core.config import settings
 from tests.conftest import API, authenticate, confirm, say
 
 
@@ -60,18 +61,67 @@ def test_an_upload_reports_what_it_found(client, headers, tmp_path):
     assert "Nom du responsable" in [p["label"] for p in body["preview"]]
 
 
-def test_a_format_we_cannot_fill_is_refused_with_a_reason(client, headers, tmp_path):
-    path = tmp_path / "notes.txt"
-    path.write_text("Rien a lire ici.", encoding="utf-8")
+def test_a_text_file_is_now_read_rather_than_refused(client, headers, tmp_path):
+    """Avant l'etape distante, un .txt etait refuse : rien a remplir dedans.
+
+    Il est desormais lu. Un fichier non remplissable produit quand meme un
+    entretien valable ; ses reponses sortiront dans un nouveau document plutot
+    que dans l'original.
+    """
+    path = tmp_path / "cadrage.txt"
+    path.write_text("Perimetre a documenter : correspondant PCA, effectif, "
+                    "activites critiques.", encoding="utf-8")
 
     with open(path, "rb") as handle:
-        res = client.post(
-            f"{API}/documents", headers=headers, files={"file": ("notes.txt", handle.read())}
-        )
+        res = client.post(f"{API}/documents", headers=headers,
+                          files={"file": ("cadrage.txt", handle.read())})
+
+    assert res.status_code == 201, res.text
+    assert res.json()["kind"] == "txt"
+
+
+def test_a_file_larger_than_the_json_limit_still_gets_through(client, headers, tmp_path):
+    """Observé en vrai : un vrai modèle BIA de 583 Ko refusé en 413.
+
+    Le plafond global des requêtes est à 256 Ko, ce qui convient à une réponse
+    d'entretien et pas du tout à un fichier. Sans exception explicite le refus
+    tombe avant la route, donc avant tout message parlant du document - et
+    l'écran, lui, annonce 12 Mo.
+    """
+    path = tmp_path / "gros.txt"
+    path.write_text("Perimetre a documenter.\n" * 30_000, encoding="utf-8")
+    assert path.stat().st_size > settings.MAX_BODY_BYTES
+
+    with open(path, "rb") as handle:
+        res = client.post(f"{API}/documents", headers=headers,
+                          files={"file": ("gros.txt", handle.read())})
+
+    assert res.status_code == 201, res.text
+
+
+def test_a_file_beyond_the_upload_limit_is_refused(client, headers, monkeypatch):
+    """L'exception relève le plafond, elle ne le supprime pas."""
+    monkeypatch.setattr(settings, "MAX_UPLOAD_BYTES", 64 * 1024, raising=False)
+
+    res = client.post(f"{API}/documents", headers=headers,
+                      files={"file": ("enorme.txt", b"x" * (128 * 1024))})
+
+    assert res.status_code == 413
+    assert "volumineuse" in res.json()["detail"].lower()
+
+
+def test_a_format_nobody_can_read_is_still_refused(client, headers, tmp_path):
+    """Un .doc de 1997 n'est pas lisible : le refus doit dire quoi envoyer."""
+    path = tmp_path / "vieux.doc"
+    # En-tete OLE2 : la signature des formats Office 97-2003.
+    path.write_bytes(bytes.fromhex("d0cf11e0a1b11ae1") + bytes(64))
+
+    with open(path, "rb") as handle:
+        res = client.post(f"{API}/documents", headers=headers,
+                          files={"file": ("vieux.doc", handle.read())})
 
     assert res.status_code == 415
-    # The refusal has to say what to send instead, or the user just retries.
-    assert "Word" in res.json()["detail"] or "Excel" in res.json()["detail"]
+    assert "97-2003" in res.json()["detail"]
 
 
 def test_a_document_belongs_to_the_account_that_uploaded_it(client, headers, tmp_path):

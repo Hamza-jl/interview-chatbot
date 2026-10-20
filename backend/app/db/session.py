@@ -61,6 +61,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # either way.
     ("survey_sessions", "document_id", "VARCHAR(32)"),
     ("uploaded_documents", "context_enc", "TEXT NOT NULL DEFAULT ''"),
+    ("uploaded_documents", "source_text_enc", "TEXT NOT NULL DEFAULT ''"),
+    ("uploaded_documents", "cloud_model", "VARCHAR(120) NOT NULL DEFAULT ''"),
 ]
 
 # Columns whose type changed. Postgres enforces VARCHAR length and SQLite does

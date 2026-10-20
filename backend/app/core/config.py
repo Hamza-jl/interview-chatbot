@@ -61,7 +61,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+pysqlite:///./var/pca.db"
     TEMPLATE_DIR: str = "./templates"
     EXPORT_DIR: str = "./var/exports"
+    # Plafond de toute requete : un entretien n'envoie que du JSON, et 256 Ko
+    # suffisent largement a une reponse.
     MAX_BODY_BYTES: int = 256 * 1024
+    # Sauf le depot d'un fichier, qui est l'exception et doit l'etre
+    # explicitement : un vrai questionnaire BIA avec ses images pese quelques
+    # centaines de Ko, parfois plusieurs Mo.
+    MAX_UPLOAD_BYTES: int = 12 * 1024 * 1024
 
     # ---- transcripts ---------------------------------------------------------
     # A readable log of each interview, one file per entity, rewritten after

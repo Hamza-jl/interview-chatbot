@@ -36,7 +36,7 @@ function SourceTabs({
 }) {
   const tabs: { id: Source; label: string; hint: string }[] = [
     { id: "structure", label: "État des lieux", hint: "Les questionnaires préparés" },
-    { id: "document", label: "Mon document", hint: "Word, Excel, PowerPoint, PDF" },
+    { id: "document", label: "Mon document", hint: "Word, Excel, PDF, texte, scan" },
   ];
   return (
     <div className="mx-auto w-full max-w-4xl px-5 pt-6">

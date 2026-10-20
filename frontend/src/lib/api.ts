@@ -430,3 +430,42 @@ export async function uploadDocument(file: File): Promise<UploadResult> {
 export function documentIdOf(templateKind: string): string | null {
   return templateKind.startsWith("doc:") ? templateKind.slice(4) : null;
 }
+
+/* --------------------------------------------------------------------- */
+/* Analyse distante (OpenRouter)                                          */
+/* --------------------------------------------------------------------- */
+
+/** Ce qui partirait vers le modèle distant, montré avant que ça ne parte. */
+export interface OutboundPreview {
+  id: string;
+  /** Le serveur a-t-il l'analyse distante activée et configurée ? */
+  available: boolean;
+  models: string[];
+  /** Les réponses pourront-elles être écrites dans le fichier d'origine ? */
+  fillable: boolean;
+  summary: string;
+  redactions: Record<string, number>;
+  truncated: boolean;
+  chars: number;
+  text: string;
+}
+
+export interface CloudField {
+  id: string;
+  kind: string;
+  label: string;
+  section: string;
+  columns: string[];
+  /** false = la réponse sera collectée mais pas écrite dans le fichier. */
+  writable: boolean;
+}
+
+export interface CloudResult extends UploadedDocument {
+  model: string;
+  attempts: string[];
+  seconds: number;
+  matched: number;
+  invented: number;
+  notes: string[];
+  fields: CloudField[];
+}

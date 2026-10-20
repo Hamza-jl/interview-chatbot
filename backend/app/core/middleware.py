@@ -73,13 +73,35 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _taille(octets: int) -> str:
+    return (f"{octets // 1024 // 1024} Mo" if octets >= 1024 * 1024
+            else f"{octets // 1024} Ko")
+
+
 class BodyLimitMiddleware(BaseHTTPMiddleware):
+    """Un plafond global, et une seule exception, nommée.
+
+    Le dépôt d'un fichier est la seule requête de l'application qui porte autre
+    chose que du JSON, donc la seule qui ait une raison d'être volumineuse. Sans
+    cette exception elle est refusée à 256 Ko alors que l'écran annonce 12 Mo -
+    un refus d'autant plus déroutant qu'il tombe avant la route, avec un message
+    qui ne parle pas du fichier.
+    """
+
+    def _limit(self, request: Request) -> int:
+        path = request.url.path.rstrip("/")
+        if request.method == "POST" and path.endswith("/documents"):
+            return settings.MAX_UPLOAD_BYTES
+        return settings.MAX_BODY_BYTES
+
     async def dispatch(self, request: Request, call_next):
         declared = request.headers.get("content-length")
-        if declared and declared.isdigit() and int(declared) > settings.MAX_BODY_BYTES:
+        limite = self._limit(request)
+        if declared and declared.isdigit() and int(declared) > limite:
             return JSONResponse(
                 status_code=413,  # Content Too Large
-                content={"detail": "Charge utile trop volumineuse."},
+                content={"detail": "Charge utile trop volumineuse "
+                                   f"(maximum {_taille(limite)})."},
             )
         return await call_next(request)
 

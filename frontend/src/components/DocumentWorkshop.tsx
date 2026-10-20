@@ -4,12 +4,14 @@ import {
   ApiError,
   api,
   uploadDocument,
+  type CloudResult,
   type DocumentDetail,
   type SessionDetail,
   type UploadResult,
   type UploadedDocument,
 } from "../lib/api";
 import { Spinner } from "./AuthFlow";
+import { CloudAnalysis } from "./CloudAnalysis";
 
 /**
  * Bring your own questionnaire.
@@ -30,9 +32,35 @@ const KIND_LABEL: Record<string, string> = {
   xlsx: "Excel",
   pptx: "PowerPoint",
   pdf: "PDF",
+  odt: "OpenDocument",
+  ods: "OpenDocument",
+  odp: "OpenDocument",
+  rtf: "Texte enrichi",
+  csv: "Tableau CSV",
+  txt: "Texte",
+  md: "Texte",
+  json: "Données",
+  png: "Image",
+  jpg: "Image",
+  webp: "Image",
+  gif: "Image",
+  tiff: "Image",
+  bmp: "Image",
 };
 
-const ACCEPT = ".docx,.xlsx,.xlsm,.pptx,.pdf";
+// Les seuls formats dans lesquels une réponse peut être réécrite sur place.
+const FILLABLE = new Set(["docx", "xlsx", "pptx", "pdf"]);
+
+// Les quatre premiers se remplissent sur place ; le reste produit un entretien
+// dont les réponses sortent dans un nouveau document. Le serveur accepte tout
+// ce qu'il sait lire, et refuse le reste avec une raison, donc cette liste ne
+// sert qu'à épargner au consultant un aller-retour.
+const ACCEPT = [
+  ".docx,.xlsx,.xlsm,.pptx,.pdf",
+  ".odt,.ods,.odp,.rtf",
+  ".txt,.md,.csv,.tsv,.json,.log",
+  ".png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff",
+].join(",");
 
 function FileGlyph({ kind }: { kind: string }) {
   const tone =
@@ -119,7 +147,11 @@ export function DocumentWorkshop({
       setContext("");
       setSavedContext("");
       void reload();
-      if (result.slots === 0) {
+      // Zéro emplacement n'est un échec que pour un format qui, lui, pouvait en
+      // porter : un CSV ou un scan n'en a jamais, et l'écran de lecture
+      // distante qui s'affiche juste en dessous est la suite normale, pas un
+      // rattrapage. Crier à l'erreur ici ferait fermer la page.
+      if (result.slots === 0 && FILLABLE.has(result.kind)) {
         onError("Aucun emplacement à remplir n'a été trouvé dans ce fichier.");
       }
     } catch (err) {
@@ -214,9 +246,10 @@ export function DocumentWorkshop({
           Votre document, <span className="text-poppy-500">rempli par l&apos;entretien</span>
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-300">
-          Déposez un questionnaire Word, Excel, PowerPoint ou un PDF à champs. Il est lu
-          ici même, sur cette machine ; vous récupérez le fichier d&apos;origine complété,
-          dans sa mise en forme.
+          Déposez le fichier que vous devez faire remplir, quel qu&apos;il soit. Un
+          Word, un Excel, un PowerPoint ou un PDF à champs revient complété dans
+          sa mise en forme ; un texte, un tableau ou un scan donne un entretien
+          dont les réponses sortent dans un nouveau document.
         </p>
       </motion.header>
 
@@ -270,7 +303,8 @@ export function DocumentWorkshop({
               Glissez un fichier ici, ou cliquez pour le choisir
             </p>
             <p className="mt-1 text-xs text-ink-400">
-              .docx · .xlsx · .pptx · .pdf — 12 Mo maximum
+              Word, Excel, PowerPoint, PDF, texte, tableur, scan ou photo —
+              12 Mo maximum
             </p>
           </>
         )}
@@ -311,6 +345,23 @@ export function DocumentWorkshop({
                 ))}
               </ul>
             )}
+
+            {/* Hors du bloc ci-dessous, et volontairement : c'est quand le
+                lecteur local n'a RIEN trouvé que cet écran sert le plus. Un
+                CSV, une note ou un scan arrivent ici avec zéro emplacement, et
+                la lecture distante est leur seule issue. */}
+            <CloudAnalysis
+              documentId={selected.id}
+              found={selected.slots}
+              onError={onError}
+              onUnderstood={(r: CloudResult) => {
+                // Le plan vient d'être remplacé côté serveur : on recharge
+                // plutôt que de recoller deux sources de vérité. La liste du
+                // bas porte le même compteur, donc elle se recharge aussi.
+                void open(r);
+                void reload();
+              }}
+            />
 
             {selected.slots > 0 && (
               <>

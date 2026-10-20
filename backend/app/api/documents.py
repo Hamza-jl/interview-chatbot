@@ -35,7 +35,7 @@ from app.db.models import Answer, SurveySession, UploadedDocument, utcnow
 from app.db.session import get_db
 from app.ingest import plan as ingest_plan
 from app.ingest import questions as ingest_questions
-from app.ingest import reader, write_back
+from app.ingest import extract, outbound, reader, understand, write_back
 from app.ingest.slots import DocumentPlan, Slot
 from app.schemas.api import SessionDetail
 
@@ -44,8 +44,11 @@ logger = logging.getLogger("pca.documents")
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 # Generous enough for a real questionnaire, small enough that a mistaken upload
-# of a video does not fill the disk.
-MAX_UPLOAD_BYTES = 12 * 1024 * 1024
+# of a video does not fill the disk. Lu depuis la configuration, et non fixé
+# ici, parce que le middleware applique le même plafond en amont : deux valeurs
+# séparées se seraient désynchronisées, et le refus serait venu du middleware
+# avec un message qui ne parle pas du fichier.
+MAX_UPLOAD_BYTES = settings.MAX_UPLOAD_BYTES
 
 
 def _upload_dir() -> str:
@@ -141,6 +144,7 @@ def _out(document: UploadedDocument) -> Dict[str, Any]:
         "grids": document.grid_count,
         "size_bytes": document.size_bytes,
         "has_context": bool(document.context_enc),
+        "cloud_model": document.cloud_model or "",
         "created_at": deps._aware(document.created_at).isoformat(),
     }
 
@@ -188,8 +192,16 @@ async def upload(
         handle.write(payload)
 
     try:
-        discovered = reader.read(staging, name)
-    except reader.UnsupportedDocument as refused:
+        # `extract` lit tout ce qui est lisible, pas seulement les quatre formats
+        # remplissables : un scan ou un CSV produit un entretien valable, dont
+        # les reponses sortiront dans un nouveau document.
+        read = extract.read(staging, name)
+        discovered = read.plan if read.plan is not None else DocumentPlan(
+            filename=name, kind=read.kind, title=name, slots=[], notes=read.notes)
+        cloud_text = read.text
+        fillable = read.fillable
+        images = read.images
+    except extract.Unreadable as refused:
         os.remove(staging)
         db.rollback()
         raise HTTPException(status_code=415, detail=str(refused)) from refused
@@ -215,6 +227,11 @@ async def upload(
         handle.write(encrypt_bytes(dek, document.id, "source", payload))
 
     document.plan_enc = seal_json(dek, document.id, "plan", _plan_to_json(discovered, {}))
+    # Le texte lisible est scelle a part : c'est lui, et lui seul, qui partira
+    # si le consultant demande une analyse distante.
+    document.source_text_enc = seal_json(
+        dek, document.id, "source_text",
+        {"text": cloud_text, "fillable": fillable, "images": images})
 
     audit.record(
         db, action="document.upload", actor_id=principal.id, target=document.id,
@@ -279,6 +296,113 @@ def set_context(
     )
     db.commit()
     return {"id": document.id, "context": text, "questions_stale": stale}
+
+
+# --------------------------------------------------------------------------- #
+# Analyse par modele distant
+# --------------------------------------------------------------------------- #
+def _source_text(document: UploadedDocument) -> Dict[str, Any]:
+    if not document.source_text_enc:
+        return {"text": "", "fillable": False, "images": 0}
+    dek = unwrap_dek(document.wrapped_dek)
+    return open_json(dek, document.id, "source_text", document.source_text_enc) or {}
+
+
+@router.get("/{document_id}/outbound")
+def outbound_preview(
+    document_id: str,
+    db: Session = Depends(get_db),
+    principal: deps.Principal = Depends(deps.require_password_set),
+) -> Dict[str, Any]:
+    """Exactement ce qui partirait, avant que quoi que ce soit ne parte.
+
+    Un consultant qui voit un nom de client dans cet ecran peut l'ajouter aux
+    termes a masquer et recommencer. C'est le seul moment ou cela coute encore
+    quelque chose de s'en apercevoir.
+    """
+    from app.ai import openrouter
+
+    document = _own(db, principal, document_id)
+    source = _source_text(document)
+    sent = outbound.prepare(document.filename, document.kind,
+                            source.get("text", ""), images=source.get("images", 0))
+    return {
+        "id": document.id,
+        "available": openrouter.available(),
+        "models": openrouter.models(),
+        "fillable": bool(source.get("fillable")),
+        "summary": sent.summary(),
+        "redactions": sent.redactions,
+        "truncated": sent.truncated,
+        "chars": sent.size_chars,
+        "text": sent.text[:12000],
+    }
+
+
+@router.post("/{document_id}/understand")
+def understand_remotely(
+    document_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: deps.Principal = Depends(deps.require_csrf),
+) -> Dict[str, Any]:
+    """Envoie le fichier au modele distant et enregistre ce qu'il a compris."""
+    from app.ai import openrouter
+
+    document = _own(db, principal, document_id)
+    if not openrouter.available():
+        raise HTTPException(
+            status_code=409,
+            detail="L'analyse distante n'est pas activée sur ce serveur.")
+
+    source = _source_text(document)
+    extraction = extract.Extraction(
+        kind=document.kind, text=source.get("text", ""),
+        fillable=bool(source.get("fillable")), images=source.get("images", 0),
+        plan=load_plan(document)[0] if document.plan_enc else None,
+    )
+
+    try:
+        result = understand.understand(extraction, document.filename)
+    except outbound.OutboundRefused as refused:
+        raise HTTPException(status_code=409, detail=str(refused)) from refused
+    except openrouter.OpenRouterUnavailable as down:
+        raise HTTPException(status_code=503, detail=str(down)) from down
+
+    dek = unwrap_dek(document.wrapped_dek)
+    document.plan_enc = seal_json(dek, document.id, "plan",
+                                  _plan_to_json(result.plan, {}))
+    document.title = (result.plan.title or document.filename)[:300]
+    document.slot_count = len(result.plan.slots)
+    document.grid_count = len(result.plan.grids)
+    document.cloud_model = result.model[:120]
+    ingest_plan.forget(document.id)
+
+    audit.record(
+        db, action="document.understand", actor_id=principal.id, target=document.id,
+        ip=ratelimit.client_ip(request),
+        meta={"model": result.model, "attempts": result.attempts,
+              "fields": len(result.plan.slots), "matched": result.matched,
+              "invented": result.invented, "chars_sent": result.sent.size_chars,
+              "redactions": result.sent.redactions},
+    )
+    db.commit()
+    db.refresh(document)
+
+    return {
+        **_out(document),
+        "model": result.model,
+        "attempts": result.attempts,
+        "seconds": result.seconds,
+        "matched": result.matched,
+        "invented": result.invented,
+        "notes": result.plan.notes,
+        "fields": [
+            {"id": s.id, "kind": s.kind, "label": s.label, "section": s.section,
+             "columns": s.columns, "writable": bool(s.target)}
+            for s in result.plan.slots
+        ],
+    }
 
 
 # --------------------------------------------------------------------------- #

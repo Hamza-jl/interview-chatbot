@@ -70,6 +70,33 @@ def _cell_text(cell) -> str:
     return " ".join(cell.text.split())
 
 
+# « Tableau N°9 : Référents de crise », « Table 3 - Applications », « Figure 2 : … »
+_CAPTION = re.compile(
+    r"^\s*(?:tableau|table|figure|annexe)\s*n?\s*[°ºo]?\s*[\dIVXA-Za-z]*(?:[.\-]\d+)*"
+    r"\s*[:\-–—]\s*(?P<titre>.+?)\s*$",
+    re.IGNORECASE,
+)
+# En dessous, la légende ne nomme rien : « Tableau N°3.c : » tout seul, ou
+# « Tableau N°3.b : Evaluation des impacts : » tronqué à deux lettres.
+_MIN_CAPTION = 4
+
+
+def _caption(paragraph: Paragraph) -> Optional[str]:
+    """The table's own caption, when the line above it carries one.
+
+    A section heading names a whole section, which may hold several tables; the
+    caption names one. Where the two disagree the caption is right - and they do
+    disagree, in every template that puts a matrix the reader cannot fill under
+    the same heading as the table it can, because the heading then lands on the
+    wrong table.
+    """
+    match = _CAPTION.match(" ".join(paragraph.text.split()))
+    if not match:
+        return None
+    titre = match.group("titre").strip(" :;-–—")
+    return titre if len(titre) >= _MIN_CAPTION else None
+
+
 _INSTRUCTION = re.compile(
     r"^\s*(?:n\.?\s?b\.?|note|nota|remarque|ex\.?|exemple|cf\.?|voir)\b",
     re.IGNORECASE,
@@ -181,6 +208,9 @@ def read(path: str, filename: str = "") -> DocumentPlan:
     ignored: List[str] = []
     table_index = 0
 
+    caption: Optional[str] = None
+    légendes: set = set()
+
     for block in _iter_blocks(document):
         if isinstance(block, Paragraph):
             level = _heading_level(block)
@@ -192,20 +222,31 @@ def read(path: str, filename: str = "") -> DocumentPlan:
                     title = " ".join(text.split())
                 # Keep the trail shallow: two levels is all a question needs.
                 context = (context[: max(0, level - 1)] + [text])[-3:]
+                caption = None
+            elif text:
+                # Une légende ne vaut que pour le tableau qui la suit : toute
+                # autre ligne de texte entre les deux la périme.
+                caption = _caption(block)
             continue
 
         table_index += 1
         shape = _classify(block)
+        # Une légende déjà portée par un tableau précédent ne distingue plus
+        # rien - et ce document-ci en a deux identiques. Dans ce cas le titre de
+        # section, lui, sépare bien les deux.
+        if caption and caption.lower() in légendes:
+            caption = None
+        nom = caption or (context[-1] if context else f"Tableau {table_index}")
+        if caption:
+            légendes.add(caption.lower())
+        caption = None
 
         if shape == "prose" and _is_unread_form(block):
-            ignored.append(
-                f"« {context[-1] } » (tableau {table_index})" if context
-                else f"tableau {table_index}"
-            )
+            ignored.append(f"« {nom} » (tableau {table_index})")
 
         if shape == "grid":
             header = [_cell_text(c) for c in block.rows[0].cells]
-            label = context[-1] if context else f"Tableau {table_index}"
+            label = nom
             example = None
             for row in block.rows[1:]:
                 values = [_cell_text(c) for c in row.cells]

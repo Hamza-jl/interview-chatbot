@@ -227,6 +227,13 @@ class UploadedDocument(Base):
     # and therefore the most likely to carry something confidential.
     context_enc: Mapped[str] = mapped_column(Text, default="")
 
+    # Le texte lisible du fichier, scelle a part. C'est le seul contenu qui peut
+    # sortir vers un modele distant, et le garder separe du plan rend ce fait
+    # verifiable plutot que suppose.
+    source_text_enc: Mapped[str] = mapped_column(Text, default="")
+    # Quel modele distant a lu ce fichier, et quand. Question legitime en banque.
+    cloud_model: Mapped[str] = mapped_column(String(120), default="")
+
     slot_count: Mapped[int] = mapped_column(Integer, default=0)
     grid_count: Mapped[int] = mapped_column(Integer, default=0)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)

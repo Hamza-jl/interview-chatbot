@@ -85,6 +85,88 @@ def test_a_header_over_empty_rows_becomes_one_table_question(tmp_path):
     assert grid.context[-1] == "5. Applications", "the heading gives the question meaning"
 
 
+def _docx_two_tables_one_heading(tmp_path, captions: bool):
+    """The shape a real BIA template has: one heading, two tables under it.
+
+    The first is a matrix the reader cannot fill, so only the second becomes a
+    question - and without its own caption it inherits a heading that describes
+    the matrix instead of itself.
+    """
+    document = Document()
+    document.add_heading("7. Effectif et positions de travail", level=1)
+    if captions:
+        document.add_paragraph("Tableau N°8 : Effectif et positions de travail")
+    matrix = document.add_table(rows=2, cols=3)
+    for index, name in enumerate(["Montée en charge", "H+1", "J+1"]):
+        matrix.rows[0].cells[index].text = name
+    matrix.rows[1].cells[0].text = "Effectif"
+
+    if captions:
+        document.add_paragraph("Tableau N°9 : Référents de crise")
+    crisis = document.add_table(rows=3, cols=3)
+    for index, name in enumerate(["Id agent", "Titulaire", "Suppléant"]):
+        crisis.rows[0].cells[index].text = name
+
+    path = tmp_path / ("legende.docx" if captions else "sans.docx")
+    document.save(path)
+    return read_docx.read(str(path))
+
+
+def test_a_table_is_named_by_its_own_caption_not_the_section(tmp_path):
+    """Observed on a real template: the heading landed on the wrong table."""
+    plan = _docx_two_tables_one_heading(tmp_path, captions=True)
+
+    assert len(plan.grids) == 1
+    assert plan.grids[0].label == "Référents de crise"
+    assert plan.grids[0].context[-1] == "7. Effectif et positions de travail", (
+        "la section reste disponible pour situer la question"
+    )
+
+
+def test_without_a_caption_the_section_still_names_the_table(tmp_path):
+    plan = _docx_two_tables_one_heading(tmp_path, captions=False)
+
+    assert len(plan.grids) == 1
+    assert plan.grids[0].label == "7. Effectif et positions de travail"
+
+
+def test_a_caption_that_names_two_tables_names_neither(tmp_path):
+    """Templates copy-paste captions; a duplicate stops distinguishing."""
+    document = Document()
+    document.add_heading("Matériels spécifiques", level=1)
+    document.add_paragraph("Tableau N°12 : Autres équipements")
+    first = document.add_table(rows=2, cols=2)
+    for index, name in enumerate(["Désignation", "Justification"]):
+        first.rows[0].cells[index].text = name
+
+    document.add_heading("Mobilité de crise", level=1)
+    document.add_paragraph("Tableau N°14 : Autres équipements")
+    second = document.add_table(rows=2, cols=2)
+    for index, name in enumerate(["Besoin", "Justification"]):
+        second.rows[0].cells[index].text = name
+
+    path = tmp_path / "doublon.docx"
+    document.save(path)
+
+    labels = [g.label for g in read_docx.read(str(path)).grids]
+    assert labels == ["Autres équipements", "Mobilité de crise"]
+    assert len(set(labels)) == len(labels), "deux questions ne peuvent porter le même nom"
+
+
+def test_an_empty_caption_is_not_a_name(tmp_path):
+    """« Tableau N°3.c : » with nothing after it names nothing."""
+    document = Document()
+    document.add_heading("5. Métrique d'impact", level=1)
+    document.add_paragraph("Tableau N°3.c :")
+    table = document.add_table(rows=2, cols=2)
+    for index, name in enumerate(["Critère", "Niveau"]):
+        table.rows[0].cells[index].text = name
+    path = tmp_path / "vide.docx"
+    document.save(path)
+
+    assert read_docx.read(str(path)).grids[0].label == "5. Métrique d'impact"
+
+
 def test_a_filled_table_is_not_mistaken_for_a_form(tmp_path):
     """Data already in the document must not be turned into questions."""
     document = Document()
