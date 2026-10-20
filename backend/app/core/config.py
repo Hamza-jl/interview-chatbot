@@ -82,6 +82,43 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 4000
     LLM_EFFORT: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
 
+    # ---- Cloud document understanding (OpenRouter) ---------------------------
+    # Reading an arbitrary file - a scan, a slide, a spreadsheet nobody templated -
+    # needs a bigger model than a bank server will host. OpenRouter provides one.
+    #
+    # It is used for ONE thing: understanding an uploaded file's structure well
+    # enough to write questions from it. The interview itself, and every answer a
+    # client gives, stays on the local model. Off by default: this is the only
+    # part of the system that talks to the outside world, so it has to be turned
+    # on deliberately.
+    OPENROUTER_ENABLED: bool = False
+    # One or more keys, comma-separated. Free models are rate-limited per key,
+    # so a second key is not redundancy, it is throughput: a 429 moves to the
+    # next key before it gives up on the model.
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # Free tier only, verified against the live catalogue: each of these accepts
+    # a JSON schema and reads images, which is what lets a scanned form be
+    # understood. Tried in order; a model that is down, rate-limited or retired
+    # falls through to the next rather than failing the upload.
+    OPENROUTER_MODELS: str = (
+        "nvidia/nemotron-3.5-super-vl:free,"
+        "openrouter/free,"
+        "dots-studio/dots-3-note-preview:free"
+    )
+    OPENROUTER_TIMEOUT: int = 180
+    # These are reasoning models: the thinking tokens are drawn from the same
+    # budget as the answer. Measured on the free tier, a document analysis costs
+    # 150-600 tokens of answer behind several hundred of reasoning, and a budget
+    # that is too small returns an empty message rather than an error.
+    OPENROUTER_MAX_TOKENS: int = 8000
+    # Nothing leaves the building until a human has seen exactly what would be
+    # sent. Turning this off is a deliberate choice to skip that review.
+    OPENROUTER_REQUIRE_REVIEW: bool = True
+    # Names redacted from anything sent outbound, on top of the automatic rules.
+    # Comma-separated; put your clients here.
+    OPENROUTER_REDACT_TERMS: str = ""
+
     # ---- Local inference (Ollama) --------------------------------------------
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:3b"
